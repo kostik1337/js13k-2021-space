@@ -1,0 +1,21 @@
+{
+  "name": "flying-spaceship-game",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode development",
+    "serve": "webpack serve --mode development",
+    "build-rel": "webpack --mode production"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "raw-loader": "^4.0.2",
+    "ts-loader": "^8.0.17",
+    "typescript": "^4.2.3",
+    "webpack": "^5.24.3",
+    "webpack-cli": "^4.5.0",
+    "webpack-dev-server": "^3.11.2"
+  }
+}

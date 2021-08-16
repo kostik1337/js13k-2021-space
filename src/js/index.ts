@@ -1,0 +1,233 @@
+import { createPostprocTexFb, DoubleTextureRenderTarget, initScreenQuadBuffer, RenderPipeline, ScreenRenderTarget, ShaderProgram } from './glhelpers'
+import * as math from './math'
+import { GameInput } from './input';
+
+// from webpack define plugin
+declare var DEBUG_DATA: boolean;
+
+// type PosRot = {
+//     position: math.V3;
+//     rotation: math.Quat;
+// }
+
+// export type RenderData = {
+//     ship: PosRot | null;
+//     view: PosRot;
+//     timeBonusPos: math.V3 | null;
+//     speedBonusPos: math.V3 | null;
+//     uiOffset: math.V3;
+// }
+
+export type Context = {
+    canvasGL: HTMLCanvasElement;
+    gl: WebGLRenderingContext;
+    canvas2d: HTMLCanvasElement;
+    context2d: CanvasRenderingContext2D;
+    time: number;
+    lastDate: number;
+    dtSmoothed: number; // FIXME
+    input: GameInput;
+    renderPipeline: RenderPipeline;
+    canvasTex: WebGLTexture;
+}
+
+export let debugInfo = {
+    fps: 0,
+    frames: 0,
+    lastTimeCheck: 0,
+
+    update(timeMillis: number) {
+        this.frames++;
+        if (timeMillis - this.lastTimeCheck > 1000) {
+            this.lastTimeCheck = timeMillis;
+            this.fps = this.frames;
+            this.frames = 0;
+        }
+    }
+}
+
+class Main {
+    ctx: Context;
+
+    initRenderPipeline(gl: WebGLRenderingContext): RenderPipeline {
+        let loadShader = (name: string): string => require(`../glsl/${name}`).default;
+
+        const bufferTarget = new DoubleTextureRenderTarget()
+        const outputTarget = new ScreenRenderTarget()
+
+        const renderPipeline = new RenderPipeline(gl,
+            [
+                bufferTarget,
+                outputTarget
+            ],
+            {
+                "pass1": {
+                    program: new ShaderProgram(gl,
+                        loadShader("simple.vert.glsl"),
+                        loadShader("main.frag.glsl")
+                    ),
+                    inputs: [bufferTarget],
+                    output: bufferTarget
+                },
+                "render": {
+                    program: new ShaderProgram(gl,
+                        loadShader("simple.vert.glsl"),
+                        loadShader("bypass.frag.glsl")
+                    ),
+                    inputs: [bufferTarget],
+                    output: outputTarget
+                },
+            })
+
+        return renderPipeline
+    }
+
+    constructor() {
+        const canvasGL = document.getElementById("canvasgl") as HTMLCanvasElement;
+        const canvas2d = document.getElementById("canvas2d") as HTMLCanvasElement;
+        const gl = canvasGL.getContext('webgl');
+        const context2d = canvas2d.getContext("2d")
+        if (!gl) {
+            console.log('Unable to initialize WebGL');
+            return;
+        }
+        if (!context2d) {
+            console.log('Unable to initialize 2d context');
+            return;
+        }
+
+        canvas2d.width = 800
+        canvas2d.height = 480
+        const canvasTex = createPostprocTexFb(gl, [canvas2d.width, canvas2d.height], gl.NEAREST)
+
+        const rg = this.initRenderPipeline(gl)
+        rg.resize(canvasGL.width, canvasGL.height)
+        this.ctx = {
+            canvasGL,
+            canvas2d,
+            gl,
+            context2d,
+            time: 0,
+            dtSmoothed: 0.016,
+            lastDate: Date.now(),
+            input: new GameInput(canvasGL),
+            renderPipeline: rg,
+            canvasTex
+        }
+
+        window.addEventListener('resize', () => this.handleResize());
+        this.handleResize()
+
+        this.loop();
+    }
+
+    render() {
+        const gl = this.ctx.gl
+        const pipeline = this.ctx.renderPipeline
+
+        {
+            const { program, size } = pipeline.renderPassBegin("pass1")
+            gl.uniform1i(program.uniformLoc("tex"), 0)
+            gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
+            gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
+            pipeline.renderPassCommit()
+        }
+
+        {
+            const { program, size } = pipeline.renderPassBegin("render")
+            gl.uniform1i(program.uniformLoc("tex"), 0)
+            // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
+            gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
+            pipeline.renderPassCommit()
+        }
+        // gl.disable(gl.BLEND)
+        // this.currentScreen().preRenderGL(this.ctx)
+
+        // {
+        //     const { locations, w, h } = rg.renderPassBegin<MainProgramData>("render")
+
+        //     gl.uniform1f(locations.timeLoc, this.ctx.time)
+        //     gl.uniform2f(locations.resLoc, w, h)
+
+        //     let renderData = this.ctx.renderData
+        //     if (renderData.ship) {
+        //         gl.uniformMatrix3fv(locations.shipRotationLoc, false, renderData.ship.rotation.toMatrix().values)
+        //         let pos = renderData.ship.position
+        //         gl.uniform3f(locations.shipPosLoc, pos.x, pos.y, pos.z)
+        //     } else {
+        //         gl.uniform3f(locations.shipPosLoc, 500,0,0)
+        //         gl.uniformMatrix3fv(locations.shipRotationLoc, false, math.Matrix3.id().values)
+        //     }
+
+        //     gl.uniformMatrix3fv(locations.viewRotationLoc, false, renderData.view.rotation.toMatrix().values)
+        //     let vpos = renderData.view.position
+        //     gl.uniform3f(locations.viewPosLoc, vpos.x, vpos.y, vpos.z)
+
+        //     let tbPos = renderData.timeBonusPos
+        //     if (tbPos)
+        //         gl.uniform4f(locations.timeBonusPosLoc, tbPos.x, tbPos.y, tbPos.z, config.timeBonusRadius)
+        //     else gl.uniform4f(locations.timeBonusPosLoc, 0, 0, 0, -1)
+
+        //     let sbPos = renderData.speedBonusPos
+        //     if (sbPos)
+        //         gl.uniform4f(locations.speedBonusPosLoc, sbPos.x, sbPos.y, sbPos.z, config.speedBonusRadius)
+        //     else gl.uniform4f(locations.speedBonusPosLoc, 0, 0, 0, -1)
+
+        //     rg.renderPassCommit()
+        // }
+
+        // {
+        //     const { locations, w, h } = rg.renderPassBegin<PostprocProgramData>("fxaa")
+        //     gl.uniform2f(locations.resLoc, w, h)
+        //     gl.uniform1i(locations.texPosLoc, 0)
+        //     rg.renderPassCommit()
+        // }
+
+        // gl.enable(gl.BLEND)
+        // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+        // {
+        //     gl.activeTexture(gl.TEXTURE1)
+        //     gl.bindTexture(gl.TEXTURE_2D, this.canvasTex)
+        //     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.ctx.canvas2d);
+
+        //     const { locations, w, h } = rg.renderPassBegin<UiProgramData>("ui")
+        //     gl.uniform2f(locations.resLoc, w, h)
+        //     gl.uniform1i(locations.texPosLoc, 1)
+        //     gl.uniform2f(locations.texSizeLoc, this.ctx.canvas2d.width, this.ctx.canvas2d.height)
+        //     const uiOff = this.ctx.renderData.uiOffset;
+        //     gl.uniform3f(locations.offsetLoc, uiOff.x, uiOff.y, uiOff.z)
+        //     rg.renderPassCommit()
+        // }
+    }
+
+    loop() {
+        const ctx = this.ctx
+        let date = Date.now()
+        let dt = (date - ctx.lastDate) / 1000
+        ctx.time += dt
+        ctx.lastDate = date
+        debugInfo.update(date)
+
+        ctx.dtSmoothed = math.mix(ctx.dtSmoothed, dt, 0.1); // FIXME: without smoothing everything trembles
+
+        // const screen = this.currentScreen();
+        // screen.update(ctx, ctx.dtSmoothed)
+        // screen.renderCanvas(ctx, dt)
+        this.render()
+        ctx.input.update() // Update input post screen update because whole architecture is shit
+
+        window.requestAnimationFrame(() => this.loop());
+    }
+
+    handleResize() {
+        const [w, h] = [window.innerWidth, window.innerHeight];
+        [this.ctx.canvasGL].forEach(canvas => {
+            canvas.width = w
+            canvas.height = h
+        })
+        this.ctx.renderPipeline.resize(w, h)
+    }
+}
+
+document.getElementById("canvasgl").onclick = () => { new Main() }
