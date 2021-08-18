@@ -2,6 +2,8 @@ uniform sampler2D tex;
 uniform vec2 res;
 uniform float t;
 
+out vec4 outColor;
+
 float map(vec2 p) {
   float s = .2;
   p.x -= t;
@@ -16,7 +18,7 @@ void main(void) {
   vec3 col = vec3(0.);
   col += step(map(uv), 0.);
 
-  col += texture2D(tex, gl_FragCoord.xy / res).rgb * 0.8;
+  col += texture(tex, gl_FragCoord.xy / res).rgb * 0.8;
 
-  gl_FragColor = vec4(col, 1.);
+  outColor = vec4(col, 1.);
 }

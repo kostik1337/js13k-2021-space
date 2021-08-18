@@ -5,7 +5,7 @@ export type TexFb = { tex: WebGLTexture, fb: WebGLFramebuffer }
 export type Size = number[]
 
 export function createPostprocTexFb(
-    gl: WebGLRenderingContext,
+    gl: WebGL2RenderingContext,
     size?: Size,
     filter: GLenum = gl.LINEAR
 ): TexFb {
@@ -26,29 +26,33 @@ export function createPostprocTexFb(
     return { tex, fb }
 }
 
-export function initScreenQuadBuffer(gl: WebGLRenderingContext): WebGLBuffer {
-    const positionBuffer = gl.createBuffer();
+export function createBuffer(gl: WebGL2RenderingContext, data: number[], usage: GLenum): WebGLBuffer {
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), usage);
+    return buffer;
+}
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-
+function initScreenQuadBuffer(gl: WebGL2RenderingContext): WebGLBuffer {
     const positions = [
         1.0, 1.0,
         -1.0, 1.0,
         1.0, -1.0,
         -1.0, -1.0
     ];
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-
-    return positionBuffer;
+    return createBuffer(gl, positions, gl.STATIC_DRAW)
 }
+
+export let loadShaderSource = (name: string): string => require(`../glsl/${name}`).default;
 
 export class ShaderProgram {
     program: WebGLProgram;
 
-    private loadShader(gl: WebGLRenderingContext, type: GLenum, source: string, prefix: string): WebGLShader {
+    private loadShader(gl: WebGL2RenderingContext, type: GLenum, source: string, prefix: string): WebGLShader {
         const shader = gl.createShader(type);
 
-        let mergedSource = "precision mediump float;\n";
+        let mergedSource = "#version 300 es\n";
+        mergedSource += "precision mediump float;\n";
         if (prefix) {
             mergedSource += `${prefix}\n`
         }
@@ -70,31 +74,37 @@ export class ShaderProgram {
     uniformLoc(name: string) { return this.gl.getUniformLocation(this.program, name); }
 
     constructor(
-        private gl: WebGLRenderingContext,
+        private gl: WebGL2RenderingContext,
         vsSource: string,
         fsSource: string,
-        prefix?: string
+        prefix?: string,
+        transformFeedbackVaryings?: string[]
     ) {
         const vertexShader = this.loadShader(gl, gl.VERTEX_SHADER, vsSource, prefix);
         const fragmentShader = this.loadShader(gl, gl.FRAGMENT_SHADER, fsSource, prefix);
 
-        const shaderProgram = gl.createProgram();
-        this.program = shaderProgram;
-        gl.attachShader(shaderProgram, vertexShader);
-        gl.attachShader(shaderProgram, fragmentShader);
-        gl.linkProgram(shaderProgram);
+        const program = gl.createProgram();
+        this.program = program;
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        if (transformFeedbackVaryings) {
+                gl.transformFeedbackVaryings(
+                program, transformFeedbackVaryings, gl.INTERLEAVED_ATTRIBS
+            )
+        }
+        gl.linkProgram(program);
 
-        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-            let errorInfo = `Unable to link the shader program: ${gl.getProgramInfoLog(shaderProgram)}`;
-            gl.deleteProgram(shaderProgram)
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            let errorInfo = `Unable to link the shader program: ${gl.getProgramInfoLog(program)}`;
+            gl.deleteProgram(program)
             throw new Error(errorInfo)
         }
     }
 }
 
 interface RenderTarget {
-    init(gl: WebGLRenderingContext): void
-    resize(gl: WebGLRenderingContext, size: Size): void
+    init(gl: WebGL2RenderingContext): void
+    resize(gl: WebGL2RenderingContext, size: Size): void
     swap(): void
     getReadTex(): WebGLTexture
     getWriteFb(): WebGLFramebuffer
@@ -102,8 +112,8 @@ interface RenderTarget {
 }
 
 export class ScreenRenderTarget implements RenderTarget {
-    init(gl: WebGLRenderingContext) { }
-    resize(gl: WebGLRenderingContext, size: Size) { }
+    init(gl: WebGL2RenderingContext) { }
+    resize(gl: WebGL2RenderingContext, size: Size) { }
     swap() { }
     getReadTex(): WebGLTexture {
         throw "Can't getReadTex on ScreenRenderBuffer"
@@ -122,12 +132,12 @@ export class DoubleTextureRenderTarget implements RenderTarget {
 
     constructor(private div: number = 1) { }
 
-    init(gl: WebGLRenderingContext) {
+    init(gl: WebGL2RenderingContext) {
         this.read = createPostprocTexFb(gl)
         this.write = createPostprocTexFb(gl)
     }
 
-    resize(gl: WebGLRenderingContext, size: Size) {
+    resize(gl: WebGL2RenderingContext, size: Size) {
         for (let texFb of [this.read, this.write]) {
             gl.bindTexture(gl.TEXTURE_2D, texFb.tex);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
@@ -161,41 +171,53 @@ export class RenderPipeline {
     size: Size;
 
     constructor(
-        private gl: WebGLRenderingContext,
-        private renderTargets: RenderTarget[],
-        private passSpecs: { [index in PassIndex]: PassSpec }
+        private gl: WebGL2RenderingContext,
+        public renderTargets: { [index in PassIndex]: RenderTarget },
+        public passSpecs: { [index in PassIndex]: PassSpec }
     ) {
         this.buffer = initScreenQuadBuffer(gl)
-        renderTargets.forEach(target => target.init(gl))
+        for (let target of Object.values(renderTargets)) {
+            target.init(gl)
+        }
     }
 
     resize(w: number, h: number) {
         this.size = [w, h]
 
         const gl = this.gl
-        this.renderTargets.forEach(target => target.resize(gl, this.size))
+        for (let target of Object.values(this.renderTargets)) {
+            target.resize(gl, this.size)
+        }
+    }
+
+    bindOutput(output: RenderTarget) {
+        const gl = this.gl
+        output.swap()
+        gl.bindFramebuffer(gl.FRAMEBUFFER, output.getWriteFb())
+        const outputSize = output.getSize(this.size)
+        gl.viewport(0, 0, outputSize[0], outputSize[1])
+        return outputSize
     }
 
     renderPassBegin(index: PassIndex): { program: ShaderProgram, size: Size } {
         const gl = this.gl
-        const passSpec = this.passSpecs[index]
-        const { program, output } = passSpec
-        output.swap()
-        gl.bindFramebuffer(gl.FRAMEBUFFER, output.getWriteFb())
+        const { program, output, inputs } = this.passSpecs[index]
+        const outputSize = this.bindOutput(output)
+        // output.swap()
+        // gl.bindFramebuffer(gl.FRAMEBUFFER, output.getWriteFb())
+        // const outputSize = output.getSize(this.size)
+        // gl.viewport(0, 0, outputSize[0], outputSize[1])
 
-        const attrPosition = program.attrLoc("aPos");
+        const attrPosition = program.attrLoc("i_pos");
         gl.vertexAttribPointer(attrPosition, 2, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(attrPosition);
 
         gl.useProgram(program.program)
 
-        if (passSpec.inputs) passSpec.inputs.forEach((input, i) => {
+        if (inputs) inputs.forEach((input, i) => {
             gl.activeTexture(gl.TEXTURE0 + i)
             gl.bindTexture(gl.TEXTURE_2D, input.getReadTex())
         })
-
-        const outputSize = output.getSize(this.size)
-        gl.viewport(0, 0, outputSize[0], outputSize[1])
 
         return { program, size: outputSize }
     }

@@ -1,6 +1,7 @@
-import { createPostprocTexFb, DoubleTextureRenderTarget, initScreenQuadBuffer, RenderPipeline, ScreenRenderTarget, ShaderProgram } from './glhelpers'
+import { createPostprocTexFb, DoubleTextureRenderTarget, loadShaderSource, RenderPipeline, ScreenRenderTarget, ShaderProgram } from './glhelpers'
 import * as math from './math'
 import { GameInput } from './input';
+import { ParticleSystem } from './particles';
 
 // from webpack define plugin
 declare var DEBUG_DATA: boolean;
@@ -20,7 +21,7 @@ declare var DEBUG_DATA: boolean;
 
 export type Context = {
     canvasGL: HTMLCanvasElement;
-    gl: WebGLRenderingContext;
+    gl: WebGL2RenderingContext;
     canvas2d: HTMLCanvasElement;
     context2d: CanvasRenderingContext2D;
     time: number;
@@ -49,30 +50,28 @@ export let debugInfo = {
 class Main {
     ctx: Context;
 
-    initRenderPipeline(gl: WebGLRenderingContext): RenderPipeline {
-        let loadShader = (name: string): string => require(`../glsl/${name}`).default;
-
+    initRenderPipeline(gl: WebGL2RenderingContext): RenderPipeline {
         const bufferTarget = new DoubleTextureRenderTarget()
         const outputTarget = new ScreenRenderTarget()
 
         const renderPipeline = new RenderPipeline(gl,
-            [
+            {
                 bufferTarget,
                 outputTarget
-            ],
+            },
             {
                 "pass1": {
                     program: new ShaderProgram(gl,
-                        loadShader("simple.vert.glsl"),
-                        loadShader("main.frag.glsl")
+                        loadShaderSource("simple.vert.glsl"),
+                        loadShaderSource("main.frag.glsl")
                     ),
                     inputs: [bufferTarget],
                     output: bufferTarget
                 },
                 "render": {
                     program: new ShaderProgram(gl,
-                        loadShader("simple.vert.glsl"),
-                        loadShader("bypass.frag.glsl")
+                        loadShaderSource("simple.vert.glsl"),
+                        loadShaderSource("bypass.frag.glsl")
                     ),
                     inputs: [bufferTarget],
                     output: outputTarget
@@ -82,10 +81,12 @@ class Main {
         return renderPipeline
     }
 
+    psys: ParticleSystem
+
     constructor() {
         const canvasGL = document.getElementById("canvasgl") as HTMLCanvasElement;
         const canvas2d = document.getElementById("canvas2d") as HTMLCanvasElement;
-        const gl = canvasGL.getContext('webgl');
+        const gl = canvasGL.getContext('webgl2');
         const context2d = canvas2d.getContext("2d")
         if (!gl) {
             console.log('Unable to initialize WebGL');
@@ -100,8 +101,7 @@ class Main {
         canvas2d.height = 480
         const canvasTex = createPostprocTexFb(gl, [canvas2d.width, canvas2d.height], gl.NEAREST)
 
-        const rg = this.initRenderPipeline(gl)
-        rg.resize(canvasGL.width, canvasGL.height)
+        const renderPipeline = this.initRenderPipeline(gl)
         this.ctx = {
             canvasGL,
             canvas2d,
@@ -111,9 +111,10 @@ class Main {
             dtSmoothed: 0.016,
             lastDate: Date.now(),
             input: new GameInput(canvasGL),
-            renderPipeline: rg,
+            renderPipeline,
             canvasTex
         }
+        this.psys = new ParticleSystem(gl)
 
         window.addEventListener('resize', () => this.handleResize());
         this.handleResize()
@@ -125,21 +126,25 @@ class Main {
         const gl = this.ctx.gl
         const pipeline = this.ctx.renderPipeline
 
-        {
-            const { program, size } = pipeline.renderPassBegin("pass1")
-            gl.uniform1i(program.uniformLoc("tex"), 0)
-            gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
-            gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
-            pipeline.renderPassCommit()
-        }
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        pipeline.bindOutput(pipeline.renderTargets["outputTarget"])
+        this.psys.updateAndRender()
+        // {
+        //     const { program, size } = pipeline.renderPassBegin("pass1")
+        //     gl.uniform1i(program.uniformLoc("tex"), 0)
+        //     gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
+        //     gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
+        //     pipeline.renderPassCommit()
+        // }
 
-        {
-            const { program, size } = pipeline.renderPassBegin("render")
-            gl.uniform1i(program.uniformLoc("tex"), 0)
-            // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
-            gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
-            pipeline.renderPassCommit()
-        }
+        // {
+        //     const { program, size } = pipeline.renderPassBegin("render")
+        //     gl.uniform1i(program.uniformLoc("tex"), 0)
+        //     // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
+        //     gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
+        //     pipeline.renderPassCommit()
+        // }
+
         // gl.disable(gl.BLEND)
         // this.currentScreen().preRenderGL(this.ctx)
 
@@ -230,4 +235,5 @@ class Main {
     }
 }
 
-document.getElementById("canvasgl").onclick = () => { new Main() }
+let canvas = document.getElementById("canvasgl")
+canvas.onclick = () => { new Main(); canvas.onclick = null }
