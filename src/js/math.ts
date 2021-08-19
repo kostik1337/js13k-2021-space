@@ -61,15 +61,50 @@ export class V3 {
     clone() { return new V3(this.x, this.y, this.z) }
 }
 
-export class Matrix3 {
+export class Matrix4 {
     constructor(public values: number[]) { }
 
-    static id(): Matrix3 {
-        return new Matrix3([
-            1, 0, 0,
-            0, 1, 0,
-            0, 0, 1
+    static id(): Matrix4 {
+        return new Matrix4([
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1
         ])
+    }
+
+    static perspective(fov: number, aspect: number, near: number, far: number): Matrix4 {
+        var f = 1 / Math.tan(fov / 2);
+        var rangeInv = 1 / (near - far);
+        return new Matrix4([
+            f / aspect, 0, 0, 0,
+            0, f, 0, 0,
+            0, 0, (near + far) * rangeInv, -1,
+            0, 0, near * far * rangeInv * 2, 0
+        ]);
+    }
+
+    static translate(x: number, y: number, z: number): Matrix4 {
+        return new Matrix4([
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            x, y, z, 1
+        ])
+    }
+
+    at(row: number, col: number): number {
+        return this.values[col * 4 + row]
+    }
+
+    multiply(m: Matrix4): Matrix4 {
+        const mulRowCol = (row: number, col: number): number =>
+            this.at(row, 0) * m.at(0, col) +
+            this.at(row, 1) * m.at(1, col) +
+            this.at(row, 2) * m.at(2, col) +
+            this.at(row, 3) * m.at(3, col)
+
+        return new Matrix4([...Array(16)].map((v, i) => mulRowCol(i % 4, Math.floor(i / 4))))
     }
 }
 
@@ -126,7 +161,7 @@ export class Quat {
         return new V3(vq.x, vq.y, vq.z)
     }
 
-    toMatrix(): Matrix3 {
+    toMatrix(): Matrix4 {
         const [w, x, y, z] = [this.w, this.x, this.y, this.z]
 
         let n = w * w + x * x + y * y + z * z;
@@ -135,10 +170,11 @@ export class Quat {
         let xx = s * x * x, xy = s * x * y, xz = s * x * z;
         let yy = s * y * y, yz = s * y * z, zz = s * z * z;
 
-        return new Matrix3([
-            1 - (yy + zz), xy - wz, xz + wy,
-            xy + wz, 1 - (xx + zz), yz - wx,
-            xz - wy, yz + wx, 1 - (xx + yy)
+        return new Matrix4([
+            1 - (yy + zz), xy - wz, xz + wy, 0,
+            xy + wz, 1 - (xx + zz), yz - wx, 0,
+            xz - wy, yz + wx, 1 - (xx + yy), 0,
+            0, 0, 0, 1
         ]);
     }
 

@@ -1,4 +1,4 @@
-import { createPostprocTexFb, DoubleTextureRenderTarget, loadShaderSource, RenderPipeline, ScreenRenderTarget, ShaderProgram } from './glhelpers'
+import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, loadShaderSource, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget } from './glhelpers'
 import * as math from './math'
 import { GameInput } from './input';
 import { ParticleSystem } from './particles';
@@ -28,7 +28,7 @@ export type Context = {
     lastDate: number;
     dtSmoothed: number; // FIXME
     input: GameInput;
-    renderPipeline: RenderPipeline;
+    renderHelper: RenderHelper;
     canvasTex: WebGLTexture;
 }
 
@@ -50,12 +50,14 @@ export let debugInfo = {
 class Main {
     ctx: Context;
 
-    initRenderPipeline(gl: WebGL2RenderingContext): RenderPipeline {
+    initRenderHelper(gl: WebGL2RenderingContext): RenderHelper {
+        const particlesTarget = new SingleTextureRenderTarget()
         const bufferTarget = new DoubleTextureRenderTarget()
         const outputTarget = new ScreenRenderTarget()
 
-        const renderPipeline = new RenderPipeline(gl,
+        const renderHelper = new RenderHelper(gl,
             {
+                particlesTarget,
                 bufferTarget,
                 outputTarget
             },
@@ -65,7 +67,7 @@ class Main {
                         loadShaderSource("simple.vert.glsl"),
                         loadShaderSource("main.frag.glsl")
                     ),
-                    inputs: [bufferTarget],
+                    inputs: [particlesTarget, bufferTarget],
                     output: bufferTarget
                 },
                 "render": {
@@ -74,11 +76,12 @@ class Main {
                         loadShaderSource("bypass.frag.glsl")
                     ),
                     inputs: [bufferTarget],
+                    // inputs: [particlesTarget],
                     output: outputTarget
                 },
             })
 
-        return renderPipeline
+        return renderHelper
     }
 
     psys: ParticleSystem
@@ -101,7 +104,7 @@ class Main {
         canvas2d.height = 480
         const canvasTex = createPostprocTexFb(gl, [canvas2d.width, canvas2d.height], gl.NEAREST)
 
-        const renderPipeline = this.initRenderPipeline(gl)
+        const renderHelper = this.initRenderHelper(gl)
         this.ctx = {
             canvasGL,
             canvas2d,
@@ -111,7 +114,7 @@ class Main {
             dtSmoothed: 0.016,
             lastDate: Date.now(),
             input: new GameInput(canvasGL),
-            renderPipeline,
+            renderHelper: renderHelper,
             canvasTex
         }
         this.psys = new ParticleSystem(gl)
@@ -124,26 +127,32 @@ class Main {
 
     render() {
         const gl = this.ctx.gl
-        const pipeline = this.ctx.renderPipeline
+        const rh = this.ctx.renderHelper
 
-        gl.clear(gl.COLOR_BUFFER_BIT)
-        pipeline.bindOutput(pipeline.renderTargets["outputTarget"])
-        this.psys.updateAndRender()
-        // {
-        //     const { program, size } = pipeline.renderPassBegin("pass1")
-        //     gl.uniform1i(program.uniformLoc("tex"), 0)
-        //     gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
-        //     gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
-        //     pipeline.renderPassCommit()
-        // }
+        {
+            const size = rh.bindOutput(rh.renderTargets["particlesTarget"])
+            gl.clearColor(0, 0, 0, 1)
+            gl.clear(gl.COLOR_BUFFER_BIT)
+            this.psys.updateAndRender(this.ctx.dtSmoothed, size)
+        }
 
-        // {
-        //     const { program, size } = pipeline.renderPassBegin("render")
-        //     gl.uniform1i(program.uniformLoc("tex"), 0)
-        //     // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
-        //     gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
-        //     pipeline.renderPassCommit()
-        // }
+        {
+            const { program, size } = rh.renderPassBegin("pass1")
+            gl.uniform1i(program.uniformLoc("newTex"), 0)
+            gl.uniform1i(program.uniformLoc("prevTex"), 1)
+            gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
+            gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
+            rh.renderPassCommit()
+            generateMips(gl, rh.renderTargets["bufferTarget"]);
+        }
+
+        {
+            const { program, size } = rh.renderPassBegin("render")
+            gl.uniform1i(program.uniformLoc("tex"), 0)
+            // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
+            gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
+            rh.renderPassCommit()
+        }
 
         // gl.disable(gl.BLEND)
         // this.currentScreen().preRenderGL(this.ctx)
@@ -231,7 +240,7 @@ class Main {
             canvas.width = w
             canvas.height = h
         })
-        this.ctx.renderPipeline.resize(w, h)
+        this.ctx.renderHelper.resize(w, h)
     }
 }
 

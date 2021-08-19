@@ -116,7 +116,7 @@ export class ScreenRenderTarget implements RenderTarget {
     resize(gl: WebGL2RenderingContext, size: Size) { }
     swap() { }
     getReadTex(): WebGLTexture {
-        throw "Can't getReadTex on ScreenRenderBuffer"
+        throw new Error("Can't getReadTex on ScreenRenderBuffer")
     }
     getWriteFb(): WebGLFramebuffer {
         return null
@@ -124,6 +124,39 @@ export class ScreenRenderTarget implements RenderTarget {
     getSize(size: Size): Size {
         return size
     }
+}
+
+export class SingleTextureRenderTarget implements RenderTarget {
+    texFb: TexFb;
+
+    constructor(private div: number = 1) { }
+
+    init(gl: WebGL2RenderingContext) {
+        this.texFb = createPostprocTexFb(gl)
+    }
+
+    resize(gl: WebGL2RenderingContext, size: Size) {
+        gl.bindTexture(gl.TEXTURE_2D, this.texFb.tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
+            size[0] / this.div, size[1] / this.div,
+            0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    }
+
+    swap() {}
+
+    getSize(size: Size) {
+        return [size[0] / this.div, size[1] / this.div]
+    }
+
+    getReadTex() { return this.texFb.tex }
+    getWriteFb() { return this.texFb.fb }
+}
+
+export function generateMips(gl: WebGL2RenderingContext, target: RenderTarget) {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, target.getReadTex());
+    gl.generateMipmap(gl.TEXTURE_2D);
+
 }
 
 export class DoubleTextureRenderTarget implements RenderTarget {
@@ -166,7 +199,7 @@ export type PassSpec = {
     inputs?: RenderTarget[],
 }
 
-export class RenderPipeline {
+export class RenderHelper {
     buffer: WebGLBuffer;
     size: Size;
 
@@ -190,23 +223,22 @@ export class RenderPipeline {
         }
     }
 
-    bindOutput(output: RenderTarget) {
+    bindOutput(output: RenderTarget, swapOutput: Boolean = true) {
         const gl = this.gl
-        output.swap()
         gl.bindFramebuffer(gl.FRAMEBUFFER, output.getWriteFb())
         const outputSize = output.getSize(this.size)
         gl.viewport(0, 0, outputSize[0], outputSize[1])
+        if(swapOutput) output.swap()
         return outputSize
     }
 
     renderPassBegin(index: PassIndex): { program: ShaderProgram, size: Size } {
         const gl = this.gl
         const { program, output, inputs } = this.passSpecs[index]
-        const outputSize = this.bindOutput(output)
-        // output.swap()
-        // gl.bindFramebuffer(gl.FRAMEBUFFER, output.getWriteFb())
-        // const outputSize = output.getSize(this.size)
-        // gl.viewport(0, 0, outputSize[0], outputSize[1])
+        const outputSize = this.bindOutput(output, false)
+
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer)
 
         const attrPosition = program.attrLoc("i_pos");
         gl.vertexAttribPointer(attrPosition, 2, gl.FLOAT, false, 0, 0);
@@ -218,13 +250,13 @@ export class RenderPipeline {
             gl.activeTexture(gl.TEXTURE0 + i)
             gl.bindTexture(gl.TEXTURE_2D, input.getReadTex())
         })
+        output.swap()
 
         return { program, size: outputSize }
     }
 
     renderPassCommit() {
         const gl = this.gl
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer)
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
 }

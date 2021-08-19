@@ -1,4 +1,5 @@
-import { createBuffer, loadShaderSource, ShaderProgram } from "./glhelpers";
+import { createBuffer, loadShaderSource, ShaderProgram, Size } from "./glhelpers";
+import { Matrix4 } from "./math";
 
 type AttribData = {
     name: string,
@@ -15,7 +16,7 @@ type BufferWithVAO = {
 export class ParticleSystem {
     private read: BufferWithVAO
     private write: BufferWithVAO
-    private numParticles = 8;
+    private numParticles = 100;
 
     private static computeProgram: ShaderProgram
     private static renderProgram: ShaderProgram
@@ -33,6 +34,7 @@ export class ParticleSystem {
         let offset = 0;
         for (const { name, numComponents } of attribs) {
             const loc = program.attrLoc(name)
+            console.log(`${name}: ${loc}`)
             gl.enableVertexAttribArray(loc);
             gl.vertexAttribPointer(
                 loc,
@@ -75,11 +77,12 @@ export class ParticleSystem {
         )
         const renderVAO = this.createVertexArray(
             gl,
-            ParticleSystem.computeProgram,
+            ParticleSystem.renderProgram,
             buffer,
             4 * 6,
             [
                 { name: "i_position", numComponents: 3 },
+                { name: "i_speed", numComponents: 3 },
             ]
         )
         return {
@@ -118,8 +121,10 @@ export class ParticleSystem {
         })
     }
 
-    updateAndRender() {
+    updateAndRender(dt: number, size: Size) {
         const gl = this.gl
+
+        // Update
         gl.useProgram(ParticleSystem.computeProgram.program);
         gl.bindVertexArray(this.read.computeVAO);
         // gl.uniform2f(updatePositionPrgLocs.canvasDimensions, gl.canvas.width, gl.canvas.height);
@@ -136,14 +141,33 @@ export class ParticleSystem {
         // turn on using fragment shaders again
         gl.disable(gl.RASTERIZER_DISCARD);
 
-        gl.useProgram(ParticleSystem.renderProgram.program);
+        // gl.bindBuffer(gl.ARRAY_BUFFER, this.write.buffer)
+        // var arrBuffer = new Float32Array(this.numParticles * 6.);
+        // gl.getBufferSubData(gl.ARRAY_BUFFER, 0, arrBuffer)
+        // console.log(arrBuffer)
+        // gl.bindBuffer(gl.ARRAY_BUFFER, null)
+
+        gl.enable(gl.BLEND)
+        gl.blendFunc(gl.ONE, gl.ONE)
+        // Render
+        let program = ParticleSystem.renderProgram;
+        gl.useProgram(program.program);
         gl.bindVertexArray(this.write.renderVAO);
         // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-        // gl.uniformMatrix4fv(
-        //     drawParticlesProgLocs.matrix,
-        //     false,
-        //     m4.orthographic(0, gl.canvas.width, 0, gl.canvas.height, -1, 1));
+        gl.uniformMatrix4fv(
+            program.uniformLoc("u_proj"),
+            false,
+            Matrix4.perspective(90, size[0] / size[1], 0.1, 10).values);
+        gl.uniformMatrix4fv(
+            program.uniformLoc("u_model"),
+            false,
+            Matrix4.translate(0, 0, -2).values);
+        gl.uniformMatrix4fv(
+            program.uniformLoc("u_view"),
+            false,
+            Matrix4.id().values);
         gl.drawArrays(gl.POINTS, 0, this.numParticles);
+        gl.disable(gl.BLEND);
 
         [this.read, this.write] = [this.write, this.read]
     }
