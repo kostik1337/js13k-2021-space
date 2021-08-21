@@ -13,9 +13,9 @@ vec4 project(vec3 p) {
 }
 
 void main() {
-  vec4 p = project(vec3(i_position));
+  vec4 p = project(i_position);
   gl_Position = p;
-  gl_PointSize = 50.0 / p.w;
-  vec4 d1 = u_model * u_view * vec4(normalize(i_speed), 1.);
+  gl_PointSize = 10.0 / p.w;
+  vec4 d1 = u_view * vec4(normalize(i_speed), 1.);
   v_dir = d1.xy;
 }

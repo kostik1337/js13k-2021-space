@@ -42,6 +42,7 @@ export let debugInfo = {
         if (timeMillis - this.lastTimeCheck > 1000) {
             this.lastTimeCheck = timeMillis;
             this.fps = this.frames;
+            console.log(this.fps)
             this.frames = 0;
         }
     }
@@ -133,7 +134,7 @@ class Main {
             const size = rh.bindOutput(rh.renderTargets["particlesTarget"])
             gl.clearColor(0, 0, 0, 1)
             gl.clear(gl.COLOR_BUFFER_BIT)
-            this.psys.updateAndRender(this.ctx.dtSmoothed, size)
+            this.psys.updateAndRender(this.ctx, size)
         }
 
         {
@@ -228,6 +229,7 @@ class Main {
         // const screen = this.currentScreen();
         // screen.update(ctx, ctx.dtSmoothed)
         // screen.renderCanvas(ctx, dt)
+        if (ctx.input.mouseState.leftButtonDown) this.psys.figure = (this.psys.figure+1)%2
         this.render()
         ctx.input.update() // Update input post screen update because whole architecture is shit
 
@@ -245,4 +247,4 @@ class Main {
 }
 
 let canvas = document.getElementById("canvasgl")
-canvas.onclick = () => { new Main(); canvas.onclick = null }
+canvas.onclick = () => { canvas.onclick = null; new Main(); }

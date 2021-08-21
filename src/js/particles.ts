@@ -1,4 +1,5 @@
 import { createBuffer, loadShaderSource, ShaderProgram, Size } from "./glhelpers";
+import { Context } from "./index";
 import { Matrix4 } from "./math";
 
 type AttribData = {
@@ -16,7 +17,8 @@ type BufferWithVAO = {
 export class ParticleSystem {
     private read: BufferWithVAO
     private write: BufferWithVAO
-    private numParticles = 100;
+    private numParticles = 40000;
+    figure = 0;
 
     private static computeProgram: ShaderProgram
     private static renderProgram: ShaderProgram
@@ -34,7 +36,7 @@ export class ParticleSystem {
         let offset = 0;
         for (const { name, numComponents } of attribs) {
             const loc = program.attrLoc(name)
-            console.log(`${name}: ${loc}`)
+            if (loc < 0) continue
             gl.enableVertexAttribArray(loc);
             gl.vertexAttribPointer(
                 loc,
@@ -61,6 +63,7 @@ export class ParticleSystem {
         for (let i = 0; i < this.numParticles; ++i) {
             bufferData.push(
                 Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1, // pos
+                // 0, 0, 0,
                 Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1, // speed
             )
         }
@@ -121,14 +124,16 @@ export class ParticleSystem {
         })
     }
 
-    updateAndRender(dt: number, size: Size) {
+    updateAndRender(ctx: Context, size: Size) {
         const gl = this.gl
 
         // Update
-        gl.useProgram(ParticleSystem.computeProgram.program);
+        let prog = ParticleSystem.computeProgram
+        gl.useProgram(prog.program);
         gl.bindVertexArray(this.read.computeVAO);
-        // gl.uniform2f(updatePositionPrgLocs.canvasDimensions, gl.canvas.width, gl.canvas.height);
-        // gl.uniform1f(updatePositionPrgLocs.deltaTime, deltaTime);
+        gl.uniform1f(prog.uniformLoc("time"), ctx.time);
+        gl.uniform1f(prog.uniformLoc("dt"), ctx.dtSmoothed);
+        gl.uniform1i(prog.uniformLoc("figure"), this.figure);
 
         gl.enable(gl.RASTERIZER_DISCARD);
 
@@ -154,14 +159,15 @@ export class ParticleSystem {
         gl.useProgram(program.program);
         gl.bindVertexArray(this.write.renderVAO);
         // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        gl.uniform1f(program.uniformLoc("power"), 14 / Math.sqrt(this.numParticles))
         gl.uniformMatrix4fv(
             program.uniformLoc("u_proj"),
             false,
-            Matrix4.perspective(90, size[0] / size[1], 0.1, 10).values);
+            Matrix4.perspective(Math.PI/2, size[0] / size[1], 0.01, 50).values);
         gl.uniformMatrix4fv(
             program.uniformLoc("u_model"),
             false,
-            Matrix4.translate(0, 0, -2).values);
+            Matrix4.translate(0, 0, -2.5).values);
         gl.uniformMatrix4fv(
             program.uniformLoc("u_view"),
             false,

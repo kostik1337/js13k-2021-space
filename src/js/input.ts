@@ -18,6 +18,9 @@ export class GameInput {
 
     constructor(canvas: HTMLCanvasElement) {
         canvas.requestPointerLock();
+        canvas.onclick = () => {
+            canvas.requestPointerLock();
+        }
 
         const updatePosition = (e: MouseEvent) => {
             this.movement = [e.movementX * config.mouseSens, e.movementY * config.mouseSens]
@@ -75,6 +78,8 @@ export class GameInput {
     }
 
     update() {
+        this.mouseState.leftButtonDown = this.mouseState.rightButtonDown = false
+
         let kbState = this.keyboardState
         let x = kbState[KeyboardButton.LEFT] ? -1 : kbState[KeyboardButton.RIGHT] ? 1 : 0
         let y = kbState[KeyboardButton.DOWN] ? 1 : kbState[KeyboardButton.UP] ? -1 : 0
