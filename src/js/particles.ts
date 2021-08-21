@@ -14,14 +14,45 @@ type BufferWithVAO = {
     tf: WebGLTransformFeedback
 }
 
+enum ProgramType {
+    COMPUTE, RENDER
+}
+
+class ProgramContainer {
+    private static programs: ShaderProgram[] = []
+
+    static getProgram(gl: WebGL2RenderingContext, type: ProgramType): ShaderProgram {
+        let typeNum = type as number
+        let prog = this.programs[typeNum]
+        if (prog == null) {
+            let data: string[] = []
+            switch (type) {
+                case ProgramType.COMPUTE:
+                    data = ["particle_comp.vert.glsl", "discard.frag.glsl", "v_position", "v_speed"]
+                    break
+                case ProgramType.RENDER:
+                    data = ["particle_render.vert.glsl", "particle_render.frag.glsl"]
+                    break
+            }
+            prog = new ShaderProgram(gl,
+                loadShaderSource(data[0]),
+                loadShaderSource(data[1]),
+                null, data.slice(2)
+            )
+            this.programs[typeNum] = prog
+        }
+        return prog
+    }
+}
+
 export class ParticleSystem {
     private read: BufferWithVAO
     private write: BufferWithVAO
     private numParticles = 40000;
     figure = 0;
 
-    private static computeProgram: ShaderProgram
-    private static renderProgram: ShaderProgram
+    private computeProgram: ShaderProgram
+    private renderProgram: ShaderProgram
 
     private createVertexArray(
         gl: WebGL2RenderingContext,
@@ -58,7 +89,7 @@ export class ParticleSystem {
         return tf;
     }
 
-    private createBufferWithArray(gl: WebGL2RenderingContext): BufferWithVAO {
+    private generateInitData(): number[] {
         const bufferData = []
         for (let i = 0; i < this.numParticles; ++i) {
             bufferData.push(
@@ -67,10 +98,14 @@ export class ParticleSystem {
                 Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1, // speed
             )
         }
-        const buffer = createBuffer(gl, bufferData, gl.STREAM_DRAW)
+        return bufferData
+    }
+
+    private createBufferWithArray(gl: WebGL2RenderingContext): BufferWithVAO {
+        const buffer = createBuffer(gl, this.generateInitData(), gl.STREAM_DRAW)
         const computeVAO = this.createVertexArray(
             gl,
-            ParticleSystem.computeProgram,
+            this.computeProgram,
             buffer,
             4 * 6,
             [
@@ -80,7 +115,7 @@ export class ParticleSystem {
         )
         const renderVAO = this.createVertexArray(
             gl,
-            ParticleSystem.renderProgram,
+            this.renderProgram,
             buffer,
             4 * 6,
             [
@@ -97,17 +132,8 @@ export class ParticleSystem {
     }
 
     constructor(private gl: WebGL2RenderingContext) {
-        if (!ParticleSystem.computeProgram) ParticleSystem.computeProgram =
-            new ShaderProgram(gl,
-                loadShaderSource("particle_comp.vert.glsl"),
-                loadShaderSource("discard.frag.glsl"),
-                null, ["v_position", "v_speed"]
-            )
-        if (!ParticleSystem.renderProgram) ParticleSystem.renderProgram =
-            new ShaderProgram(gl,
-                loadShaderSource("particle_render.vert.glsl"),
-                loadShaderSource("particle_render.frag.glsl")
-            )
+        this.computeProgram = ProgramContainer.getProgram(gl, ProgramType.COMPUTE)
+        this.renderProgram = ProgramContainer.getProgram(gl, ProgramType.RENDER)
         this.read = this.createBufferWithArray(gl)
         this.write = this.createBufferWithArray(gl)
 
@@ -124,11 +150,11 @@ export class ParticleSystem {
         })
     }
 
-    updateAndRender(ctx: Context, size: Size) {
+    updateAndRender(ctx: Context, projection: Matrix4, view: Matrix4) {
         const gl = this.gl
 
         // Update
-        let prog = ParticleSystem.computeProgram
+        let prog = this.computeProgram
         gl.useProgram(prog.program);
         gl.bindVertexArray(this.read.computeVAO);
         gl.uniform1f(prog.uniformLoc("time"), ctx.time);
@@ -152,26 +178,26 @@ export class ParticleSystem {
         // console.log(arrBuffer)
         // gl.bindBuffer(gl.ARRAY_BUFFER, null)
 
+        // Render
         gl.enable(gl.BLEND)
         gl.blendFunc(gl.ONE, gl.ONE)
-        // Render
-        let program = ParticleSystem.renderProgram;
-        gl.useProgram(program.program);
+        prog = this.renderProgram;
+        gl.useProgram(prog.program);
         gl.bindVertexArray(this.write.renderVAO);
         // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-        gl.uniform1f(program.uniformLoc("power"), 14 / Math.sqrt(this.numParticles))
+        gl.uniform1f(prog.uniformLoc("power"), 14 / Math.sqrt(this.numParticles))
         gl.uniformMatrix4fv(
-            program.uniformLoc("u_proj"),
-            false,
-            Matrix4.perspective(Math.PI/2, size[0] / size[1], 0.01, 50).values);
-        gl.uniformMatrix4fv(
-            program.uniformLoc("u_model"),
-            false,
-            Matrix4.translate(0, 0, -2.5).values);
-        gl.uniformMatrix4fv(
-            program.uniformLoc("u_view"),
+            prog.uniformLoc("u_model"),
             false,
             Matrix4.id().values);
+        gl.uniformMatrix4fv(
+            prog.uniformLoc("u_view"),
+            false,
+            view.values);
+        gl.uniformMatrix4fv(
+            prog.uniformLoc("u_proj"),
+            false,
+            projection.values);
         gl.drawArrays(gl.POINTS, 0, this.numParticles);
         gl.disable(gl.BLEND);
 

@@ -9,7 +9,7 @@ uniform mat4 u_view;
 uniform vec2 u_nearfar;
 
 vec4 project(vec3 p) {
-  return u_proj * u_model * u_view * vec4(p, 1.);
+  return u_proj * u_view * vec4(p, 1.);
 }
 
 void main() {

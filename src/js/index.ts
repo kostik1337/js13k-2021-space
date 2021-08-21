@@ -1,23 +1,10 @@
-import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, loadShaderSource, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget } from './glhelpers'
-import * as math from './math'
+import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, loadShaderSource, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
+import { Matrix4, mix, V3 } from './math';
 import { ParticleSystem } from './particles';
 
 // from webpack define plugin
 declare var DEBUG_DATA: boolean;
-
-// type PosRot = {
-//     position: math.V3;
-//     rotation: math.Quat;
-// }
-
-// export type RenderData = {
-//     ship: PosRot | null;
-//     view: PosRot;
-//     timeBonusPos: math.V3 | null;
-//     speedBonusPos: math.V3 | null;
-//     uiOffset: math.V3;
-// }
 
 export type Context = {
     canvasGL: HTMLCanvasElement;
@@ -48,8 +35,52 @@ export let debugInfo = {
     }
 }
 
+class GameState {
+    particleSystems: ParticleSystem[] = []
+    rotation: [number, number] = [0, 0]
+    position: V3 = V3.zero()
+    viewRotationMatrix: Matrix4
+
+    constructor(gl: WebGL2RenderingContext) {
+        this.particleSystems.push(new ParticleSystem(gl))
+        this.position.z = -5
+        this.initViewMat()
+    }
+
+    initViewMat() {
+        const xRot = Matrix4.rotation(this.rotation[0], 0, 2)
+        const yRot = Matrix4.rotation(this.rotation[1], 1, 2)
+        this.viewRotationMatrix = Matrix4.id()
+            .mul(xRot)
+            .mul(yRot)
+    }
+
+    update(ctx: Context) {
+        const m = this.viewRotationMatrix
+        // const forward = new V3(m.at(0, 2), m.at(1, 2), m.at(2, 2))
+        const forward = new V3(m.at(2, 0), m.at(2, 1), m.at(2, 2))
+        this.position = this.position.add(forward.scale(1. * ctx.dtSmoothed))
+    }
+
+    render(ctx: Context, size: Size) {
+        const projection = Matrix4.perspective(Math.PI / 2, size[0] / size[1], 0.01, 50)
+        const trans = Matrix4.translate(this.position.x, this.position.y, this.position.z)
+        const view = this.viewRotationMatrix.mul(trans)
+        this.particleSystems.forEach(ps => {
+            ps.updateAndRender(ctx, projection, view)
+        })
+    }
+
+    onMouseMove(dx: number, dy: number) {
+        this.rotation[0] += dx
+        this.rotation[1] -= dy
+        this.initViewMat()
+    }
+}
+
 class Main {
     ctx: Context;
+    gameState: GameState;
 
     initRenderHelper(gl: WebGL2RenderingContext): RenderHelper {
         const particlesTarget = new SingleTextureRenderTarget()
@@ -85,8 +116,6 @@ class Main {
         return renderHelper
     }
 
-    psys: ParticleSystem
-
     constructor() {
         const canvasGL = document.getElementById("canvasgl") as HTMLCanvasElement;
         const canvas2d = document.getElementById("canvas2d") as HTMLCanvasElement;
@@ -105,6 +134,7 @@ class Main {
         canvas2d.height = 480
         const canvasTex = createPostprocTexFb(gl, [canvas2d.width, canvas2d.height], gl.NEAREST)
 
+        this.gameState = new GameState(gl)
         const renderHelper = this.initRenderHelper(gl)
         this.ctx = {
             canvasGL,
@@ -114,11 +144,13 @@ class Main {
             time: 0,
             dtSmoothed: 0.016,
             lastDate: Date.now(),
-            input: new GameInput(canvasGL),
+            input: new GameInput(canvasGL,
+                (dx, dy) => { this.gameState.onMouseMove(dx, dy) },
+                (down, left) => { }
+            ),
             renderHelper: renderHelper,
             canvasTex
         }
-        this.psys = new ParticleSystem(gl)
 
         window.addEventListener('resize', () => this.handleResize());
         this.handleResize()
@@ -134,7 +166,7 @@ class Main {
             const size = rh.bindOutput(rh.renderTargets["particlesTarget"])
             gl.clearColor(0, 0, 0, 1)
             gl.clear(gl.COLOR_BUFFER_BIT)
-            this.psys.updateAndRender(this.ctx, size)
+            this.gameState.render(this.ctx, size)
         }
 
         {
@@ -224,12 +256,12 @@ class Main {
         ctx.lastDate = date
         debugInfo.update(date)
 
-        ctx.dtSmoothed = math.mix(ctx.dtSmoothed, dt, 0.1); // FIXME: without smoothing everything trembles
+        ctx.dtSmoothed = mix(ctx.dtSmoothed, dt, 0.1); // FIXME: without smoothing everything trembles
 
         // const screen = this.currentScreen();
         // screen.update(ctx, ctx.dtSmoothed)
         // screen.renderCanvas(ctx, dt)
-        if (ctx.input.mouseState.leftButtonDown) this.psys.figure = (this.psys.figure+1)%2
+        this.gameState.update(this.ctx)
         this.render()
         ctx.input.update() // Update input post screen update because whole architecture is shit
 
