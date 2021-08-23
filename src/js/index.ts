@@ -1,7 +1,9 @@
+import { config } from './config';
 import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, loadShaderSource, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
 import { Matrix4, mix, V3 } from './math';
 import { ParticleSystem } from './particles';
+import { debugLog } from './utils';
 
 // from webpack define plugin
 declare var DEBUG_DATA: boolean;
@@ -29,7 +31,7 @@ export let debugInfo = {
         if (timeMillis - this.lastTimeCheck > 1000) {
             this.lastTimeCheck = timeMillis;
             this.fps = this.frames;
-            console.log(this.fps)
+            debugLog("FPS", this.fps)
             this.frames = 0;
         }
     }
@@ -47,7 +49,7 @@ class GameState {
         this.initViewMat()
     }
 
-    initViewMat() {
+    private initViewMat() {
         const xRot = Matrix4.rotation(this.rotation[0], 0, 2)
         const yRot = Matrix4.rotation(this.rotation[1], 1, 2)
         this.viewRotationMatrix = Matrix4.id()
@@ -67,6 +69,9 @@ class GameState {
         const trans = Matrix4.translate(this.position.x, this.position.y, this.position.z)
         const view = this.viewRotationMatrix.mul(trans)
         this.particleSystems.forEach(ps => {
+            let minDist = ps.hitTest(ctx, this.position)
+            debugLog("map value", minDist)
+            debugLog("hit", minDist < config.hitDistance)
             ps.updateAndRender(ctx, projection, view)
         })
     }
@@ -174,6 +179,7 @@ class Main {
             gl.uniform1i(program.uniformLoc("newTex"), 0)
             gl.uniform1i(program.uniformLoc("prevTex"), 1)
             gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
+            gl.uniform1f(program.uniformLoc("dt"), this.ctx.dtSmoothed)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
             rh.renderPassCommit()
             generateMips(gl, rh.renderTargets["bufferTarget"]);

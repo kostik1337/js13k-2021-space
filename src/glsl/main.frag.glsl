@@ -2,6 +2,7 @@ uniform sampler2D prevTex;
 uniform sampler2D newTex;
 uniform vec2 res;
 uniform float t;
+uniform float dt;
 
 out vec4 outColor;
 
@@ -16,7 +17,7 @@ float map(vec2 p) {
   return length(p) - .03;
 }
 
-vec3 gauss(sampler2D tex, vec2 uv) {
+vec3 blur(sampler2D tex, vec2 uv) {
   vec3 col = vec3(0.);
   vec2 ts = vec2(textureSize(tex, 0));
   const float s = 2.;
@@ -35,7 +36,7 @@ void main(void) {
 
   col += texture(newTex, uv).rgb;
   // col += texture(prevTex, uv).rgb * 0.9;
-  col += gauss(prevTex, uv) * 0.9;
+  col += blur(prevTex, uv) * .9;
 
   outColor = vec4(col, 1.);
 }

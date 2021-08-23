@@ -4,9 +4,6 @@ out vec4 outColor;
 
 #define PI 3.141592
 
-uniform mat4 u_proj;
-uniform mat4 u_model;
-uniform mat4 u_view;
 uniform float power;
 
 vec3 particle(vec2 p, vec2 d) {

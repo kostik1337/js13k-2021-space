@@ -7,6 +7,7 @@ out vec3 v_speed;
 uniform float time;
 uniform float dt;
 uniform int figure;
+uniform int compute_collision;
 
 #define PI 3.14159265
 #define INF 1e10
@@ -87,6 +88,10 @@ vec3 normal(vec3 p, float m) {
 }
 
 void main() {
+  if (compute_collision > 0) {
+    v_position = vec3(map(i_position), 0., 0.);
+    return;
+  }
   vec3 p = i_position;
   float m = map(p);
   

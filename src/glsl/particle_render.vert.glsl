@@ -4,7 +4,6 @@ in vec3 i_speed;
 out vec2 v_dir;
 
 uniform mat4 u_proj;
-uniform mat4 u_model;
 uniform mat4 u_view;
 uniform vec2 u_nearfar;
 

@@ -16,14 +16,17 @@
             #canvas2d {
                 display: none;
             }
-            @font-face {
-                font-family: 'monoid_regular';
-                src: url('./monoid_regular.ttf');
+            div {
+                padding-left: 16px;
+                padding-top: 16px;
+                position: absolute;
             }
         </style>
     <body>
+        <div id="hello">Click screen to start</div>
         <canvas id="canvasgl" width="1280" height="700"></canvas>
         <canvas id="canvas2d" width="1280" height="700"></canvas>
+        <div id="debug_div" style="color: white;"></div>
         <script src="bundle.js"></script>
     </body>
 </html>

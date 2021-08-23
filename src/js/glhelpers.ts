@@ -2,7 +2,7 @@ declare var DEBUG_DATA: boolean;
 
 export type TexFb = { tex: WebGLTexture, fb: WebGLFramebuffer }
 
-export type Size = number[]
+export type Size = [number, number]
 
 export function createPostprocTexFb(
     gl: WebGL2RenderingContext,
@@ -88,7 +88,7 @@ export class ShaderProgram {
         gl.attachShader(program, vertexShader);
         gl.attachShader(program, fragmentShader);
         if (transformFeedbackVaryings) {
-                gl.transformFeedbackVaryings(
+            gl.transformFeedbackVaryings(
                 program, transformFeedbackVaryings, gl.INTERLEAVED_ATTRIBS
             )
         }
@@ -142,9 +142,9 @@ export class SingleTextureRenderTarget implements RenderTarget {
             0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     }
 
-    swap() {}
+    swap() { }
 
-    getSize(size: Size) {
+    getSize(size: Size): Size {
         return [size[0] / this.div, size[1] / this.div]
     }
 
@@ -183,7 +183,7 @@ export class DoubleTextureRenderTarget implements RenderTarget {
         [this.read, this.write] = [this.write, this.read]
     }
 
-    getSize(size: Size) {
+    getSize(size: Size): Size {
         return [size[0] / this.div, size[1] / this.div]
     }
 
@@ -228,7 +228,7 @@ export class RenderHelper {
         gl.bindFramebuffer(gl.FRAMEBUFFER, output.getWriteFb())
         const outputSize = output.getSize(this.size)
         gl.viewport(0, 0, outputSize[0], outputSize[1])
-        if(swapOutput) output.swap()
+        if (swapOutput) output.swap()
         return outputSize
     }
 
