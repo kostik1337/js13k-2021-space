@@ -2,7 +2,7 @@ import { config } from './config';
 import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, loadShaderSource, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
 import { Matrix4, mix, V3 } from './math';
-import { ParticleSystem } from './particles';
+import { ParticleSystem, ParticleSystemType } from './particles';
 import { debugLog } from './utils';
 
 // from webpack define plugin
@@ -44,8 +44,8 @@ class GameState {
     viewRotationMatrix: Matrix4
 
     constructor(gl: WebGL2RenderingContext) {
-        this.particleSystems.push(new ParticleSystem(gl))
-        this.position.z = -5
+        this.particleSystems.push(new ParticleSystem(gl, ParticleSystemType.FLOATING))
+        this.position.z = -4
         this.initViewMat()
     }
 
@@ -59,13 +59,12 @@ class GameState {
 
     update(ctx: Context) {
         const m = this.viewRotationMatrix
-        // const forward = new V3(m.at(0, 2), m.at(1, 2), m.at(2, 2))
         const forward = new V3(m.at(2, 0), m.at(2, 1), m.at(2, 2))
         this.position = this.position.add(forward.scale(1. * ctx.dtSmoothed))
     }
 
     render(ctx: Context, size: Size) {
-        const projection = Matrix4.perspective(Math.PI / 2, size[0] / size[1], 0.01, 50)
+        const projection = Matrix4.perspective(Math.PI / 3, size[0] / size[1], 0.02, 10)
         const trans = Matrix4.translate(this.position.x, this.position.y, this.position.z)
         const view = this.viewRotationMatrix.mul(trans)
         this.particleSystems.forEach(ps => {
@@ -139,6 +138,7 @@ class Main {
         canvas2d.height = 480
         const canvasTex = createPostprocTexFb(gl, [canvas2d.width, canvas2d.height], gl.NEAREST)
 
+        ParticleSystem.init(gl)
         this.gameState = new GameState(gl)
         const renderHelper = this.initRenderHelper(gl)
         this.ctx = {

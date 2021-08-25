@@ -10,13 +10,6 @@ float hash(float x) {
   return fract(sin(x*3465.1367));
 }
 
-float map(vec2 p) {
-  float s = .2;
-  p.x -= t;
-  p.x = mod(p.x, s) - s/2.;
-  return length(p) - .03;
-}
-
 vec3 blur(sampler2D tex, vec2 uv) {
   vec3 col = vec3(0.);
   vec2 ts = vec2(textureSize(tex, 0));
