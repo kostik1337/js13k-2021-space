@@ -1,5 +1,5 @@
 import { config } from "./config";
-import { createBuffer, loadShaderSource, ShaderProgram } from "./glhelpers";
+import { createBuffer, ShaderProgram } from "./glhelpers";
 import { Context } from "./index";
 import { Matrix4, V3 } from "./math";
 
@@ -18,39 +18,40 @@ type BufferWithVAO = {
     collisionTf: WebGLTransformFeedback,
 }
 
-export enum ParticleSystemType {
-    FLOATING, OBSTACLE
+export type ViewProjectionData = {
+    view: Matrix4,
+    proj: Matrix4,
+    invProjView: Matrix4,
 }
 
-export class ParticleSystem {
-    private static COLLISION_BUFFER_SIZE = 64
+export abstract class ParticleSystem {
+    protected static COLLISION_BUFFER_SIZE = 64
 
-    private static loadProgram(gl: WebGL2RenderingContext, data: string[]): ShaderProgram {
-        return new ShaderProgram(gl,
-            loadShaderSource(data[0]),
-            loadShaderSource(data[1]),
-            null, data.slice(2)
-        )
-    }
 
     static computeProgram: ShaderProgram
     static computeFloatingProgram: ShaderProgram
     static renderProgram: ShaderProgram
 
     static init(gl: WebGL2RenderingContext) {
+        const loadProgram = (gl: WebGL2RenderingContext, data: string[]): ShaderProgram => {
+            return new ShaderProgram(gl, data[0], data[1], null, data.slice(2))
+        }
         const args = ["discard.frag.glsl", "v_position", "v_speed"]
-        this.computeProgram = this.loadProgram(gl, ["particle_comp.vert.glsl", ...args])
-        this.computeFloatingProgram = this.loadProgram(gl, ["particle_comp_floating.vert.glsl", ...args])
-        this.renderProgram = this.loadProgram(gl, ["particle_render.vert.glsl", "particle_render.frag.glsl"])
+        this.computeProgram = loadProgram(gl, ["particle_comp.vert.glsl", ...args])
+        this.computeFloatingProgram = loadProgram(gl, ["particle_comp_floating.vert.glsl", ...args])
+        this.renderProgram = loadProgram(gl, ["particle_render.vert.glsl", "particle_render.frag.glsl"])
     }
 
-    private read: BufferWithVAO
-    private write: BufferWithVAO
-    private numParticles: number;
-    figure = 0;
+    protected read: BufferWithVAO
+    protected write: BufferWithVAO
 
-    private computeProgram: ShaderProgram
-    private renderProgram: ShaderProgram
+    protected numParticles: number;
+    protected computeProgram: ShaderProgram
+    protected renderProgram: ShaderProgram
+    protected particlePower: number
+    protected particleSize: number
+
+    abstract initialGenerator(): number[]
 
     private createVertexArray(
         gl: WebGL2RenderingContext,
@@ -88,19 +89,9 @@ export class ParticleSystem {
     }
 
     private generateInitData(): number[] {
-        const randRange = () => Math.random() * 2 - 1;
         const bufferData = []
-        const fspeed = config.baseFloatingSpeed
-        const generator: () => number[] =
-            this.type == ParticleSystemType.OBSTACLE ? () => [
-                randRange(), randRange(), randRange(),// pos
-                randRange(), randRange(), randRange(),// speed
-            ] : () => [
-                0,0, 500,
-                fspeed * randRange(), fspeed * randRange(), fspeed * randRange(),// speed
-            ]
         for (let i = 0; i < this.numParticles; ++i) {
-            bufferData.push(...generator())
+            bufferData.push(...this.initialGenerator())
         }
         return bufferData
     }
@@ -113,25 +104,26 @@ export class ParticleSystem {
             { name: "i_position", numComponents: 3 },
             { name: "i_speed", numComponents: 3 },
         ]
+        const stride = 4 * 6
         const computeVAO = this.createVertexArray(
             gl,
             this.computeProgram,
             buffer,
-            4 * 6,
+            stride,
             attribs
         )
         const renderVAO = this.createVertexArray(
             gl,
             this.renderProgram,
             buffer,
-            4 * 6,
+            stride,
             attribs
         )
         const computeCollisionVAO = this.createVertexArray(
             gl,
             this.computeProgram,
             collisionBuffer,
-            4 * 6,
+            stride,
             attribs
         )
         return {
@@ -145,13 +137,10 @@ export class ParticleSystem {
         }
     }
 
-    constructor(private gl: WebGL2RenderingContext, private type: ParticleSystemType) {
-        this.numParticles =
-            type == ParticleSystemType.OBSTACLE ? config.obsctacleParticleCount
-                : config.floatingParticleCount
-        this.computeProgram =
-            type == ParticleSystemType.OBSTACLE ? ParticleSystem.computeProgram :
-                ParticleSystem.computeFloatingProgram
+    constructor(protected gl: WebGL2RenderingContext) { }
+
+    protected init() {
+        const gl = this.gl
         this.renderProgram = ParticleSystem.renderProgram
         this.read = this.createBufferWithArray(gl)
         this.write = this.createBufferWithArray(gl)
@@ -172,20 +161,98 @@ export class ParticleSystem {
         })
     }
 
-    private setupComputeProgram(ctx: Context, gl: WebGL2RenderingContext, computeCollision: boolean, projection?: Matrix4, view?: Matrix4) {
+    protected setupComputeProgram(ctx: Context, gl: WebGL2RenderingContext, computeCollision: boolean, vpData?: ViewProjectionData) {
         let prog = this.computeProgram
         gl.useProgram(prog.program);
         gl.uniform1f(prog.uniformLoc("time"), ctx.time);
         gl.uniform1f(prog.uniformLoc("dt"), ctx.dtSmoothed);
         gl.uniform1i(prog.uniformLoc("compute_collision"), computeCollision ? 1 : 0);
-        if (!computeCollision) {
-            gl.uniformMatrix4fv(prog.uniformLoc("u_proj"), false, projection.values);
-            gl.uniformMatrix4fv(prog.uniformLoc("u_view"), false, view.values);
-            gl.uniformMatrix4fv(prog.uniformLoc("u_invprojview"), false, projection.mul(view).invert().values);
+        if (vpData) {
+            gl.uniformMatrix4fv(prog.uniformLoc("u_proj"), false, vpData.proj.values);
+            gl.uniformMatrix4fv(prog.uniformLoc("u_view"), false, vpData.view.values);
+            gl.uniformMatrix4fv(prog.uniformLoc("u_invprojview"), false, vpData.invProjView.values);
         }
-        if (this.type == ParticleSystemType.OBSTACLE) {
-            gl.uniform1i(prog.uniformLoc("figure"), this.figure);
-        }
+    }
+
+    updateAndRender(ctx: Context, vpData: ViewProjectionData, sizeMultiplier: number) {
+        const gl = this.gl
+
+        // Update
+        this.setupComputeProgram(ctx, gl, false, vpData)
+        gl.bindVertexArray(this.read.computeVAO);
+
+        gl.enable(gl.RASTERIZER_DISCARD);
+
+        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.write.tf);
+        gl.beginTransformFeedback(gl.POINTS);
+        gl.drawArrays(gl.POINTS, 0, this.numParticles);
+        gl.endTransformFeedback();
+        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+
+        // turn on using fragment shaders again
+        gl.disable(gl.RASTERIZER_DISCARD);
+
+        // 
+        // gl.bindBuffer(gl.ARRAY_BUFFER, this.write.buffer)
+        // var arrBuffer = new Float32Array(ParticleSystem.COLLISION_BUFFER_SIZE * 6.);
+        // gl.getBufferSubData(gl.ARRAY_BUFFER, 0, arrBuffer)
+        // gl.bindBuffer(gl.ARRAY_BUFFER, null)
+        // 
+
+        // Render
+        gl.enable(gl.BLEND)
+        gl.blendFunc(gl.ONE, gl.ONE)
+        let prog = this.renderProgram;
+        gl.useProgram(prog.program);
+        gl.bindVertexArray(this.write.renderVAO);
+        gl.uniform1f(prog.uniformLoc("power"), this.particlePower)
+        gl.uniform1f(prog.uniformLoc("size"), this.particleSize * sizeMultiplier)
+        gl.uniformMatrix4fv(
+            prog.uniformLoc("u_view"),
+            false,
+            vpData.view.values);
+        gl.uniformMatrix4fv(
+            prog.uniformLoc("u_proj"),
+            false,
+            vpData.proj.values);
+        gl.drawArrays(gl.POINTS, 0, this.numParticles);
+        gl.disable(gl.BLEND);
+
+        [this.read, this.write] = [this.write, this.read]
+    }
+}
+
+export class FloatingParticleSystem extends ParticleSystem {
+    constructor(gl: WebGL2RenderingContext) {
+        super(gl)
+        this.particlePower = 20
+        this.particleSize = 0.03
+        this.numParticles = config.floatingParticleCount
+        this.computeProgram = ParticleSystem.computeFloatingProgram
+        this.init()
+    }
+
+    initialGenerator(): number[] {
+        const randRange = () => Math.random() * 2 - 1;
+        const fspeed = config.baseFloatingSpeed
+        return [
+            0, 0, 500, // position out of frustum
+            fspeed * randRange(), fspeed * randRange(), fspeed * randRange(), // speed
+        ]
+    }
+
+}
+
+export class ObstacleParticleSystem extends ParticleSystem {
+    figure = 0;
+
+    constructor(gl: WebGL2RenderingContext) {
+        super(gl)
+        this.particlePower = 0.01
+        this.particleSize = 10
+        this.numParticles = config.obsctacleParticleCount
+        this.computeProgram = ParticleSystem.computeProgram
+        this.init()
     }
 
     hitTest(ctx: Context, pos: V3): number {
@@ -225,55 +292,18 @@ export class ParticleSystem {
         return minDist
     }
 
-    updateAndRender(ctx: Context, projection: Matrix4, view: Matrix4) {
-        const gl = this.gl
-
-        // Update
-        this.setupComputeProgram(ctx, gl, false, projection, view)
-        // let prog = this.computeProgram
-        // gl.useProgram(prog.program);
-        // gl.uniform1f(prog.uniformLoc("time"), ctx.time);
-        // gl.uniform1f(prog.uniformLoc("dt"), ctx.dtSmoothed);
-        // gl.uniform1i(prog.uniformLoc("figure"), this.figure);
-        gl.bindVertexArray(this.read.computeVAO);
-
-        gl.enable(gl.RASTERIZER_DISCARD);
-
-        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.write.tf);
-        gl.beginTransformFeedback(gl.POINTS);
-        gl.drawArrays(gl.POINTS, 0, this.numParticles);
-        gl.endTransformFeedback();
-        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
-
-        // turn on using fragment shaders again
-        gl.disable(gl.RASTERIZER_DISCARD);
-
-        // 
-        // gl.bindBuffer(gl.ARRAY_BUFFER, this.write.buffer)
-        // var arrBuffer = new Float32Array(ParticleSystem.COLLISION_BUFFER_SIZE * 6.);
-        // gl.getBufferSubData(gl.ARRAY_BUFFER, 0, arrBuffer)
-        // gl.bindBuffer(gl.ARRAY_BUFFER, null)
-        // 
-
-        // Render
-        gl.enable(gl.BLEND)
-        gl.blendFunc(gl.ONE, gl.ONE)
-        let prog = this.renderProgram;
-        gl.useProgram(prog.program);
-        gl.bindVertexArray(this.write.renderVAO);
-        gl.uniform1f(prog.uniformLoc("power"), this.type == ParticleSystemType.FLOATING ? 2. : 0.1)
-        gl.uniform1f(prog.uniformLoc("size"), this.type == ParticleSystemType.FLOATING ? 30 : 10)
-        gl.uniformMatrix4fv(
-            prog.uniformLoc("u_view"),
-            false,
-            view.values);
-        gl.uniformMatrix4fv(
-            prog.uniformLoc("u_proj"),
-            false,
-            projection.values);
-        gl.drawArrays(gl.POINTS, 0, this.numParticles);
-        gl.disable(gl.BLEND);
-
-        [this.read, this.write] = [this.write, this.read]
+    initialGenerator(): number[] {
+        const randRange = () => Math.random() * 2 - 1;
+        return [
+            randRange(), randRange(), randRange(), // position out of frustum
+            0, 0, 0,// speed
+        ]
     }
+
+    setupComputeProgram(ctx: Context, gl: WebGL2RenderingContext, computeCollision: boolean, vpData?: ViewProjectionData) {
+        super.setupComputeProgram(ctx, gl, computeCollision, vpData)
+        let prog = this.computeProgram
+        gl.uniform1i(prog.uniformLoc("figure"), this.figure);
+    }
+
 }

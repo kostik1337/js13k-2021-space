@@ -43,25 +43,21 @@ function initScreenQuadBuffer(gl: WebGL2RenderingContext): WebGLBuffer {
     return createBuffer(gl, positions, gl.STATIC_DRAW)
 }
 
-export let loadShaderSource = (name: string): string => require(`../glsl/${name}`).default;
-
 export class ShaderProgram {
     program: WebGLProgram;
 
-    private loadShader(gl: WebGL2RenderingContext, type: GLenum, source: string, prefix: string): WebGLShader {
+    private loadShader(gl: WebGL2RenderingContext, type: GLenum, source: string, name: string, prefix: string): WebGLShader {
         const shader = gl.createShader(type);
 
         let mergedSource = "#version 300 es\n";
         mergedSource += "precision mediump float;\n";
-        if (prefix) {
-            mergedSource += `${prefix}\n`
-        }
+        mergedSource += `${prefix}\n`
         mergedSource += source;
         gl.shaderSource(shader, mergedSource);
         gl.compileShader(shader);
 
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            let errorInfo = `An error occurred compiling ${type == gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${gl.getShaderInfoLog(shader)}`;
+            let errorInfo = `An error occurred compiling ${name}: ${gl.getShaderInfoLog(shader)}`;
             gl.deleteShader(shader);
             throw new Error(errorInfo)
         }
@@ -75,13 +71,16 @@ export class ShaderProgram {
 
     constructor(
         private gl: WebGL2RenderingContext,
-        vsSource: string,
-        fsSource: string,
+        vsFile: string,
+        fsFile: string,
         prefix?: string,
         transformFeedbackVaryings?: string[]
     ) {
-        const vertexShader = this.loadShader(gl, gl.VERTEX_SHADER, vsSource, prefix);
-        const fragmentShader = this.loadShader(gl, gl.FRAGMENT_SHADER, fsSource, prefix);
+        const loadShaderSource = (name: string): string => require(`../glsl/${name}`).default;
+        if (prefix == null) prefix = ""
+        prefix += "\n" + loadShaderSource("common.glsl")
+        const vertexShader = this.loadShader(gl, gl.VERTEX_SHADER, loadShaderSource(vsFile), vsFile, prefix);
+        const fragmentShader = this.loadShader(gl, gl.FRAGMENT_SHADER, loadShaderSource(fsFile), fsFile, prefix);
 
         const program = gl.createProgram();
         this.program = program;

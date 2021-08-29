@@ -1,8 +1,8 @@
 import { config } from './config';
-import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, loadShaderSource, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
+import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
 import { Matrix4, mix, V3 } from './math';
-import { ParticleSystem, ParticleSystemType } from './particles';
+import { FloatingParticleSystem, ParticleSystem } from './particles';
 import { debugLog } from './utils';
 
 // from webpack define plugin
@@ -38,13 +38,14 @@ export let debugInfo = {
 }
 
 class GameState {
-    particleSystems: ParticleSystem[] = []
+    // particleSystems: ParticleSystem[] = []
+    floatingParticles: FloatingParticleSystem
     rotation: [number, number] = [0, 0]
     position: V3 = V3.zero()
     viewRotationMatrix: Matrix4
 
     constructor(gl: WebGL2RenderingContext) {
-        this.particleSystems.push(new ParticleSystem(gl, ParticleSystemType.FLOATING))
+        this.floatingParticles = new FloatingParticleSystem(gl)
         this.position.z = -4
         this.initViewMat()
     }
@@ -67,12 +68,18 @@ class GameState {
         const projection = Matrix4.perspective(Math.PI / 3, size[0] / size[1], 0.02, 10)
         const trans = Matrix4.translate(this.position.x, this.position.y, this.position.z)
         const view = this.viewRotationMatrix.mul(trans)
-        this.particleSystems.forEach(ps => {
-            let minDist = ps.hitTest(ctx, this.position)
-            debugLog("map value", minDist)
-            debugLog("hit", minDist < config.hitDistance)
-            ps.updateAndRender(ctx, projection, view)
-        })
+        const vpData = {
+            proj: projection,
+            view,
+            invProjView: projection.mul(view).invert()
+        }
+        this.floatingParticles.updateAndRender(ctx, vpData, size[1])
+        // this.particleSystems.forEach(ps => {
+        //     let minDist = ps.hitTest(ctx, this.position)
+        //     debugLog("map value", minDist)
+        //     debugLog("hit", minDist < config.hitDistance)
+        //     ps.updateAndRender(ctx, projection, view)
+        // })
     }
 
     onMouseMove(dx: number, dy: number) {
@@ -99,18 +106,12 @@ class Main {
             },
             {
                 "pass1": {
-                    program: new ShaderProgram(gl,
-                        loadShaderSource("simple.vert.glsl"),
-                        loadShaderSource("main.frag.glsl")
-                    ),
+                    program: new ShaderProgram(gl, "simple.vert.glsl", "main.frag.glsl" ),
                     inputs: [particlesTarget, bufferTarget],
                     output: bufferTarget
                 },
                 "render": {
-                    program: new ShaderProgram(gl,
-                        loadShaderSource("simple.vert.glsl"),
-                        loadShaderSource("bypass.frag.glsl")
-                    ),
+                    program: new ShaderProgram(gl, "simple.vert.glsl", "bypass.frag.glsl"),
                     inputs: [bufferTarget],
                     // inputs: [particlesTarget],
                     output: outputTarget
