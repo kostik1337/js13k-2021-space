@@ -2,7 +2,7 @@ import { config } from './config';
 import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
 import { Matrix4, mix, V3 } from './math';
-import { FloatingParticleSystem, ParticleSystem } from './particles';
+import { FloatingParticleSystem, CollisionParticleSystem, ParticleSystem } from './particles';
 import { debugLog } from './utils';
 
 // from webpack define plugin
@@ -40,12 +40,14 @@ export let debugInfo = {
 class GameState {
     // particleSystems: ParticleSystem[] = []
     floatingParticles: FloatingParticleSystem
+    pathParticles: CollisionParticleSystem
     rotation: [number, number] = [0, 0]
     position: V3 = V3.zero()
     viewRotationMatrix: Matrix4
 
     constructor(gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
+        this.pathParticles = new CollisionParticleSystem(gl)
         this.position.z = -4
         this.initViewMat()
     }
@@ -73,7 +75,11 @@ class GameState {
             view,
             invProjView: projection.mul(view).invert()
         }
-        this.floatingParticles.updateAndRender(ctx, vpData, size[1])
+        let particles = [
+            this.floatingParticles,
+            this.pathParticles
+        ]
+        particles.forEach(it => it.updateAndRender(ctx, vpData, size[1]))
         // this.particleSystems.forEach(ps => {
         //     let minDist = ps.hitTest(ctx, this.position)
         //     debugLog("map value", minDist)

@@ -29,7 +29,7 @@ void main(void) {
   col = mix(
     texture(newTex, uv).rgb,
     blur(prevTex, uv),
-    .9
+    .85
   );
 
   outColor = vec4(col, 1.);

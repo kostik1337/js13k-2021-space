@@ -16,6 +16,6 @@ void main() {
 
   vec4 screenPosition;
   if (isOutOfSight(u_proj, u_view, v_position, screenPosition)) {
-    v_position = generateRandomPosition(screenPosition, u_invprojview, gl_VertexID, time);
+    v_position = generateRandomPosition(screenPosition, u_invprojview, gl_VertexID, time, 1.);
   }
 }

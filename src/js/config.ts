@@ -5,5 +5,5 @@ export const config = {
 
     baseFloatingSpeed: 0.1,
     floatingParticleCount: 100,
-    obsctacleParticleCount: 2000,
+    obsctacleParticleCount: 50000,
 }

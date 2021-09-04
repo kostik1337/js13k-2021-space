@@ -48,7 +48,7 @@ export abstract class ParticleSystem {
     protected numParticles: number;
     protected computeProgram: ShaderProgram
     protected renderProgram: ShaderProgram
-    protected particlePower: number
+    protected particleColor: V3
     protected particleSize: number
 
     abstract initialGenerator(): number[]
@@ -205,7 +205,8 @@ export abstract class ParticleSystem {
         let prog = this.renderProgram;
         gl.useProgram(prog.program);
         gl.bindVertexArray(this.write.renderVAO);
-        gl.uniform1f(prog.uniformLoc("power"), this.particlePower)
+        const col = this.particleColor
+        gl.uniform3f(prog.uniformLoc("color"), col.x, col.y, col.z)
         gl.uniform1f(prog.uniformLoc("size"), this.particleSize * sizeMultiplier)
         gl.uniformMatrix4fv(
             prog.uniformLoc("u_view"),
@@ -225,8 +226,8 @@ export abstract class ParticleSystem {
 export class FloatingParticleSystem extends ParticleSystem {
     constructor(gl: WebGL2RenderingContext) {
         super(gl)
-        this.particlePower = 20
-        this.particleSize = 0.03
+        this.particleColor = new V3(1, 1, 1).scale(1)
+        this.particleSize = 0.1
         this.numParticles = config.floatingParticleCount
         this.computeProgram = ParticleSystem.computeFloatingProgram
         this.init()
@@ -243,13 +244,13 @@ export class FloatingParticleSystem extends ParticleSystem {
 
 }
 
-export class ObstacleParticleSystem extends ParticleSystem {
+export class CollisionParticleSystem extends ParticleSystem {
     figure = 0;
 
     constructor(gl: WebGL2RenderingContext) {
         super(gl)
-        this.particlePower = 0.01
-        this.particleSize = 10
+        this.particleColor = new V3(1, 1, 1).scale(5)
+        this.particleSize = 0.01
         this.numParticles = config.obsctacleParticleCount
         this.computeProgram = ParticleSystem.computeProgram
         this.init()
@@ -293,9 +294,9 @@ export class ObstacleParticleSystem extends ParticleSystem {
     }
 
     initialGenerator(): number[] {
-        const randRange = () => Math.random() * 2 - 1;
+        // const randRange = () => Math.random() * 2 - 1;
         return [
-            randRange(), randRange(), randRange(), // position out of frustum
+            0, 0, 100, // position out of frustum
             0, 0, 0,// speed
         ]
     }

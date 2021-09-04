@@ -5,7 +5,7 @@ out vec4 outColor;
 
 #define PI 3.141592
 
-uniform float power;
+uniform vec3 color;
 
 vec3 particle(vec2 p) {
   float dist = .1;
@@ -24,6 +24,6 @@ void main(void) {
   vec2 uv = gl_PointCoord*2.-1.;
   uv.y = -uv.y;
 
-  vec3 c = vec3(.6, .7, 1.2) * particle(uv) * power * v_pow;
+  vec3 c = particle(uv) * color * v_pow;
   outColor = vec4(c, 1.);
 }

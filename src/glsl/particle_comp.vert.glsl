@@ -8,10 +8,15 @@ uniform float time;
 uniform float dt;
 uniform int figure;
 uniform int compute_collision;
+uniform mat4 u_proj;
+uniform mat4 u_view;
+uniform mat4 u_invprojview;
 
 #define PI 3.14159265
 #define INF 1e10
 #define mr(t) (mat2(cos(t), sin(t), -sin(t), cos(t)))
+#define rep(p, s) (mod(p, s) - s/2.)
+#define rep2(p, s) (abs(rep(p, 2.*s)) - s/2.)
 
 // float mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
 vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
@@ -56,35 +61,43 @@ float circle(vec3 p, vec2 size) {
 
 float sdCross(vec3 p, vec2 s) {
   p = abs(p);
-  if (p.x < p.y) p.xy = p.yx;
+  // if (p.x < p.y) p.xy = p.yx;
   if (p.y < p.z) p.yz = p.zy;
   if (p.x < p.y) p.xy = p.yx;
   return box2(p.yz, s);
 }
 
 float map(vec3 p) {
-  p.xz *= mr(time*.2);
-  p.yz *= mr(time*.17);
+  // p.xz *= mr(time*.2);
+  // p.yz *= mr(time*.17);
 
   float m = INF;
   if (figure == 0) {
-    m = max(box(p, vec3(1.)), -sdCross(p, vec2(.9)));
-  } else {
-    vec2 s = vec2(1.41, .05);
-    m = circle(p, s);
-    m = min(m, circle(p.yzx, s));
-    m = min(m, circle(p.zxy, s));
+    p.xy += .9*sin(p.z * vec2(.2, .3));
+    p.xy += .7*sin(p.z * vec2(.41, .64));
+    m = length(p.xy) - .1;
+  } else if (figure == 1) {
+    p = rep(p, vec3(3.));
+    m = sdCross(p, vec2(.01));
+    // m = length(p.xy) - .1;
+
+    // vec2 s = vec2(1.41, .05);
+    // m = circle(p, s);
+    // m = min(m, circle(p.yzx, s));
+    // m = min(m, circle(p.zxy, s));
   }
   return m;
 }
 
-vec3 normal(vec3 p, float m) {
+vec4 mnormal(vec3 p) {
   vec2 E = vec2(.001, .0);
-  return normalize(vec3(
+  float m = map(p);
+  vec3 normal = normalize(vec3(
     map(p+E.xyy),
     map(p+E.yxy),
     map(p+E.yyx)
   ) - m);
+  return vec4(m, normal);
 }
 
 void main() {
@@ -93,13 +106,14 @@ void main() {
     return;
   }
   vec3 p = i_position;
-  float m = map(p);
+  vec4 mn = mnormal(p);
+  float m = mn.x;
   
   vec3 acc;
   float maxSpeed;
   float airFriction;
   if (m > 0.) {
-    vec3 n = normal(p, m);
+    vec3 n = mn.yzw;
     acc = -50.*m*m*n;
     maxSpeed = 2.;
     airFriction = .1;
@@ -115,10 +129,17 @@ void main() {
     maxSpeed = .7;
     airFriction = 0.;
   }
-  // maxSpeed = 1e10;
 
   v_speed = i_speed + acc * dt;
   v_speed = normalize(v_speed) * min(length(v_speed) - airFriction * dt, maxSpeed);
-  // v_speed *= damp;
   v_position = i_position + v_speed * dt;
+
+  vec4 screenPosition;
+  if (isOutOfSight(u_proj, u_view, v_position, screenPosition)) {
+    v_position = generateRandomPosition(screenPosition, u_invprojview, gl_VertexID, time, 1.);
+    for (int i=0; i<3; ++i) {
+      vec4 mn = mnormal(v_position);
+      v_position -= mn.x * mn.yzw;
+    }
+  }
 }
