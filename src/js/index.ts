@@ -1,5 +1,5 @@
 import { config } from './config';
-import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
+import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, RenderHelper as RenderHelper, RenderTarget, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
 import { Matrix4, mix, V3, vadd, vscale } from './math';
 import { FloatingParticleSystem, CollisionParticleSystem, ParticleSystem } from './particles';
@@ -7,6 +7,19 @@ import { debugLog } from './utils';
 
 // from webpack define plugin
 declare var DEBUG_DATA: boolean;
+
+type RenderTargets = {
+    particlesTarget: RenderTarget,
+    bufferTarget: RenderTarget,
+    outputTarget: RenderTarget
+}
+
+type ShaderPrograms = {
+    pass1: ShaderProgram,
+    screen: ShaderProgram,
+}
+
+type MyRenderHelper = RenderHelper<RenderTargets, ShaderPrograms>
 
 export type Context = {
     canvasGL: HTMLCanvasElement;
@@ -17,7 +30,7 @@ export type Context = {
     lastDate: number;
     dtSmoothed: number; // FIXME
     input: GameInput;
-    renderHelper: RenderHelper;
+    renderHelper: MyRenderHelper;
     canvasTex: WebGLTexture;
 }
 
@@ -99,30 +112,23 @@ class Main {
     ctx: Context;
     gameState: GameState;
 
-    initRenderHelper(gl: WebGL2RenderingContext): RenderHelper {
+
+    initRenderHelper(gl: WebGL2RenderingContext): MyRenderHelper {
         const particlesTarget = new SingleTextureRenderTarget()
         const bufferTarget = new DoubleTextureRenderTarget()
         const outputTarget = new ScreenRenderTarget()
 
-        const renderHelper = new RenderHelper(gl,
+        const renderHelper = new RenderHelper<RenderTargets, ShaderPrograms>(gl,
             {
                 particlesTarget,
                 bufferTarget,
                 outputTarget
             },
             {
-                "pass1": {
-                    program: new ShaderProgram(gl, "simple.vert.glsl", "main.frag.glsl"),
-                    inputs: [particlesTarget, bufferTarget],
-                    output: bufferTarget
-                },
-                "render": {
-                    program: new ShaderProgram(gl, "simple.vert.glsl", "bypass.frag.glsl"),
-                    inputs: [bufferTarget],
-                    // inputs: [particlesTarget],
-                    output: outputTarget
-                },
-            })
+                pass1: new ShaderProgram(gl, "simple.vert.glsl", "main.frag.glsl"),
+                screen: new ShaderProgram(gl, "simple.vert.glsl", "bypass.frag.glsl"),
+            }
+        )
 
         return renderHelper
     }
@@ -182,25 +188,33 @@ class Main {
         const rh = this.ctx.renderHelper
 
         {
-            const size = rh.bindOutput(rh.renderTargets["particlesTarget"])
+            const size = rh.bindOutput(rh.renderTargets.particlesTarget)
             gl.clearColor(0, 0, 0, 1)
             gl.clear(gl.COLOR_BUFFER_BIT)
             this.gameState.render(this.ctx, size)
         }
 
         {
-            const { program, size } = rh.renderPassBegin("pass1")
+            const { program, size } = rh.renderPassBegin(
+                [rh.renderTargets.particlesTarget, rh.renderTargets.bufferTarget],
+                rh.renderTargets.bufferTarget,
+                rh.programs.pass1
+            )
             gl.uniform1i(program.uniformLoc("newTex"), 0)
             gl.uniform1i(program.uniformLoc("prevTex"), 1)
             gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
             gl.uniform1f(program.uniformLoc("dt"), this.ctx.dtSmoothed)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
             rh.renderPassCommit()
-            generateMips(gl, rh.renderTargets["bufferTarget"]);
+            generateMips(gl, rh.renderTargets.bufferTarget);
         }
 
         {
-            const { program, size } = rh.renderPassBegin("render")
+            const { program, size } = rh.renderPassBegin(
+                [rh.renderTargets.bufferTarget],
+                rh.renderTargets.outputTarget,
+                rh.programs.screen
+            )
             gl.uniform1i(program.uniformLoc("tex"), 0)
             // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])

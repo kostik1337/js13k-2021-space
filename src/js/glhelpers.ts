@@ -101,7 +101,7 @@ export class ShaderProgram {
     }
 }
 
-interface RenderTarget {
+export interface RenderTarget {
     init(gl: WebGL2RenderingContext): void
     resize(gl: WebGL2RenderingContext, size: Size): void
     swap(): void
@@ -190,22 +190,17 @@ export class DoubleTextureRenderTarget implements RenderTarget {
     getWriteFb() { return this.write.fb }
 }
 
-export type PassIndex = string;
+type RenderTargets = { [index in string]: RenderTarget }
+type Programs = { [index in string]: ShaderProgram }
 
-export type PassSpec = {
-    program: ShaderProgram,
-    output: RenderTarget,
-    inputs?: RenderTarget[],
-}
-
-export class RenderHelper {
+export class RenderHelper<RT extends RenderTargets, PR extends Programs> {
     buffer: WebGLBuffer;
     size: Size;
 
     constructor(
         private gl: WebGL2RenderingContext,
-        public renderTargets: { [index in PassIndex]: RenderTarget },
-        public passSpecs: { [index in PassIndex]: PassSpec }
+        public renderTargets: RT,
+        public programs: PR
     ) {
         this.buffer = initScreenQuadBuffer(gl)
         for (let target of Object.values(renderTargets)) {
@@ -231,9 +226,8 @@ export class RenderHelper {
         return outputSize
     }
 
-    renderPassBegin(index: PassIndex): { program: ShaderProgram, size: Size } {
+    renderPassBegin(inputs: RenderTarget[] | null, output: RenderTarget, program: ShaderProgram): { program: ShaderProgram, size: Size } {
         const gl = this.gl
-        const { program, output, inputs } = this.passSpecs[index]
         const outputSize = this.bindOutput(output, false)
 
         gl.bindVertexArray(null);
