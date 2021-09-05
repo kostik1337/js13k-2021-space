@@ -1,7 +1,7 @@
 import { config } from './config';
 import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, RenderHelper as RenderHelper, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
-import { Matrix4, mix, V3 } from './math';
+import { Matrix4, mix, V3, vadd, vscale } from './math';
 import { FloatingParticleSystem, CollisionParticleSystem, ParticleSystem } from './particles';
 import { debugLog } from './utils';
 
@@ -42,13 +42,13 @@ class GameState {
     floatingParticles: FloatingParticleSystem
     pathParticles: CollisionParticleSystem
     rotation: [number, number] = [0, 0]
-    position: V3 = V3.zero()
+    position: V3 = [0, 0, 0]
     viewRotationMatrix: Matrix4
 
     constructor(gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
         this.pathParticles = new CollisionParticleSystem(gl)
-        this.position.z = -4
+        this.position[2] = -4
         this.initViewMat()
     }
 
@@ -62,13 +62,13 @@ class GameState {
 
     update(ctx: Context) {
         const m = this.viewRotationMatrix
-        const forward = new V3(m.at(2, 0), m.at(2, 1), m.at(2, 2))
-        this.position = this.position.add(forward.scale(1. * ctx.dtSmoothed))
+        const forward: V3 = [m.at(2, 0), m.at(2, 1), m.at(2, 2)]
+        this.position = vadd(this.position, vscale(forward, 1. * ctx.dtSmoothed))
     }
 
     render(ctx: Context, size: Size) {
-        const projection = Matrix4.perspective(Math.PI / 3, size[0] / size[1], 0.02, 10)
-        const trans = Matrix4.translate(this.position.x, this.position.y, this.position.z)
+        const projection = Matrix4.perspective(Math.PI / 3, size[0] / size[1], .1, 10)
+        const trans = Matrix4.translate(this.position)
         const view = this.viewRotationMatrix.mul(trans)
         const vpData = {
             proj: projection,
@@ -112,7 +112,7 @@ class Main {
             },
             {
                 "pass1": {
-                    program: new ShaderProgram(gl, "simple.vert.glsl", "main.frag.glsl" ),
+                    program: new ShaderProgram(gl, "simple.vert.glsl", "main.frag.glsl"),
                     inputs: [particlesTarget, bufferTarget],
                     output: bufferTarget
                 },
@@ -163,6 +163,13 @@ class Main {
             renderHelper: renderHelper,
             canvasTex
         }
+
+        // MDN.multiplyPoint(MDN.perspectiveMatrix(Math.PI/2, 1, 1, 10), [0,0,1,1])
+        // const mat = Matrix4.perspective(Math.PI/2, 1, 1, 10)
+        // const v = mat.mulVec([0, 0, 10, 1])
+
+        // console.log("v", v)
+        // console.log("z", v[2]/v[3])
 
         window.addEventListener('resize', () => this.handleResize());
         this.handleResize()

@@ -1,7 +1,7 @@
 import { config } from "./config";
 import { createBuffer, ShaderProgram } from "./glhelpers";
 import { Context } from "./index";
-import { Matrix4, V3 } from "./math";
+import { Matrix4, V3, vpow, vscale } from "./math";
 
 type AttribData = {
     name: string,
@@ -50,6 +50,16 @@ export abstract class ParticleSystem {
     protected renderProgram: ShaderProgram
     protected particleColor: V3
     protected particleSize: number
+
+    protected createColor = (color: string, power: number): V3 => {
+        let v: V3 = [
+            parseInt(color.substr(0, 2), 16) / 255,
+            parseInt(color.substr(2, 2), 16) / 255,
+            parseInt(color.substr(4, 2), 16) / 255,
+        ]
+        v = vscale(vpow(v, 2.2), power)
+        return v
+    }
 
     abstract initialGenerator(): number[]
 
@@ -206,7 +216,7 @@ export abstract class ParticleSystem {
         gl.useProgram(prog.program);
         gl.bindVertexArray(this.write.renderVAO);
         const col = this.particleColor
-        gl.uniform3f(prog.uniformLoc("color"), col.x, col.y, col.z)
+        gl.uniform3f(prog.uniformLoc("color"), col[0], col[1], col[2])
         gl.uniform1f(prog.uniformLoc("size"), this.particleSize * sizeMultiplier)
         gl.uniformMatrix4fv(
             prog.uniformLoc("u_view"),
@@ -226,7 +236,7 @@ export abstract class ParticleSystem {
 export class FloatingParticleSystem extends ParticleSystem {
     constructor(gl: WebGL2RenderingContext) {
         super(gl)
-        this.particleColor = new V3(1, 1, 1).scale(1)
+        this.particleColor = this.createColor("ffffff", .2)
         this.particleSize = 0.1
         this.numParticles = config.floatingParticleCount
         this.computeProgram = ParticleSystem.computeFloatingProgram
@@ -238,6 +248,7 @@ export class FloatingParticleSystem extends ParticleSystem {
         const fspeed = config.baseFloatingSpeed
         return [
             0, 0, 500, // position out of frustum
+            // randRange(), randRange(), randRange(), 
             fspeed * randRange(), fspeed * randRange(), fspeed * randRange(), // speed
         ]
     }
@@ -249,8 +260,8 @@ export class CollisionParticleSystem extends ParticleSystem {
 
     constructor(gl: WebGL2RenderingContext) {
         super(gl)
-        this.particleColor = new V3(1, 1, 1).scale(5)
-        this.particleSize = 0.01
+        this.particleColor = this.createColor("7374FF", .3)
+        this.particleSize = 0.03
         this.numParticles = config.obsctacleParticleCount
         this.computeProgram = ParticleSystem.computeProgram
         this.init()
@@ -262,7 +273,7 @@ export class CollisionParticleSystem extends ParticleSystem {
         const array = []
         for (let i = 0; i < ParticleSystem.COLLISION_BUFFER_SIZE; ++i) {
             array.push(
-                pos.x, pos.y, pos.z,
+                pos[0], pos[1], pos[2],
                 0, 0, 0
             )
         }

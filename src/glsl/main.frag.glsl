@@ -27,9 +27,9 @@ void main(void) {
   // col += texture(prevTex, uv).rgb * 0.9;
   // col += blur(prevTex, uv) * .9;
   col = mix(
-    texture(newTex, uv).rgb,
-    blur(prevTex, uv),
-    .85
+    sqrt(texture(newTex, uv).rgb),
+    texture(prevTex, uv).rgb,
+    .7
   );
 
   outColor = vec4(col, 1.);

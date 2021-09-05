@@ -2,64 +2,12 @@ export const clamp = (n: number, min: number, max: number) => Math.max(min, Math
 export const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t
 export const mixFactor = (dt: number, dampingLog: number) => Math.exp(dt * 60 * dampingLog)
 
-export class V3 {
-    constructor(
-        public x: number,
-        public y: number,
-        public z: number
-    ) { }
+export type V3 = [number, number, number]
+export type V4 = [number, number, number, number]
 
-    static zero(): V3 { return new V3(0, 0, 0) }
-
-    public static RIGHT: V3 = new V3(1, 0, 0)
-    public static UP: V3 = new V3(0, 1, 0)
-    public static FORWARD: V3 = new V3(0, 0, 1)
-
-    add(v: V3): V3 {
-        return new V3(this.x + v.x, this.y + v.y, this.z + v.z)
-    }
-
-    sub(v: V3): V3 {
-        return new V3(this.x - v.x, this.y - v.y, this.z - v.z)
-    }
-
-    dot(v: V3): number {
-        return this.x * v.x + this.y * v.y + this.z * v.z;
-    }
-
-    cross(v: V3): V3 {
-        return new V3(
-            this.y * v.z - this.z * v.y,
-            this.z * v.x - this.x * v.z,
-            this.x * v.y - this.y * v.x
-        )
-    }
-
-    scale(s: number) {
-        return new V3(this.x * s, this.y * s, this.z * s)
-    }
-
-    lenSq(): number { return this.x * this.x + this.y * this.y + this.z * this.z; }
-
-    len(): number { return Math.sqrt(this.lenSq()) }
-
-    mix(other: V3, factor: number): V3 {
-        return this.scale(1 - factor).add(other.scale(factor))
-    }
-
-    normalize() {
-        let lenInv = 1. / this.len()
-        this.x *= lenInv
-        this.y *= lenInv
-        this.z *= lenInv
-    }
-
-    toString() {
-        return `[${this.x.toFixed(2)}, ${this.y.toFixed(2)}, ${this.z.toFixed(2)}]`;
-    }
-
-    clone() { return new V3(this.x, this.y, this.z) }
-}
+export const vadd = <T extends number[]>(v1: T, v2: T): T => v1.map((v, i) => v + v2[i]) as T
+export const vscale = <T extends number[]>(v1: T, s: number): T => v1.map(v => v * s) as T
+export const vpow = <T extends number[]>(v1: T, p: number): T => v1.map(v => Math.pow(v, p)) as T
 
 export class Matrix4 {
     constructor(public values: number[]) { }
@@ -94,12 +42,12 @@ export class Matrix4 {
         ]);
     }
 
-    static translate(x: number, y: number, z: number): Matrix4 {
+    static translate(v: V3): Matrix4 {
         return new Matrix4([
             1, 0, 0, 0,
             0, 1, 0, 0,
             0, 0, 1, 0,
-            x, y, z, 1
+            v[0], v[1], v[2], 1
         ])
     }
 
@@ -109,6 +57,15 @@ export class Matrix4 {
 
     set(row: number, col: number, v: number) {
         this.values[col * 4 + row] = v
+    }
+
+    mulVec(v: V4): V4 {
+        return v.map((val, i) =>
+            this.at(i, 0) * v[0] +
+            this.at(i, 1) * v[1] +
+            this.at(i, 2) * v[2] +
+            this.at(i, 3) * v[3]
+        ) as V4
     }
 
     mul(m: Matrix4): Matrix4 {
