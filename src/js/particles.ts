@@ -24,6 +24,16 @@ export type ViewProjectionData = {
     invProjView: Matrix4,
 }
 
+const createColor = (color: string, power: number): V3 => {
+    let v: V3 = [
+        parseInt(color.substr(0, 2), 16) / 255,
+        parseInt(color.substr(2, 2), 16) / 255,
+        parseInt(color.substr(4, 2), 16) / 255,
+    ]
+    v = vscale(vpow(v, 2), power)
+    return v
+}
+
 export abstract class ParticleSystem {
     protected static COLLISION_BUFFER_SIZE = 64
 
@@ -50,16 +60,6 @@ export abstract class ParticleSystem {
     protected renderProgram: ShaderProgram
     protected particleColor: V3
     protected particleSize: number
-
-    protected createColor = (color: string, power: number): V3 => {
-        let v: V3 = [
-            parseInt(color.substr(0, 2), 16) / 255,
-            parseInt(color.substr(2, 2), 16) / 255,
-            parseInt(color.substr(4, 2), 16) / 255,
-        ]
-        v = vscale(vpow(v, 2.2), power)
-        return v
-    }
 
     abstract initialGenerator(): number[]
 
@@ -236,7 +236,7 @@ export abstract class ParticleSystem {
 export class FloatingParticleSystem extends ParticleSystem {
     constructor(gl: WebGL2RenderingContext) {
         super(gl)
-        this.particleColor = this.createColor("ffffff", .2)
+        this.particleColor = createColor("ffffff", .2)
         this.particleSize = 0.1
         this.numParticles = config.floatingParticleCount
         this.computeProgram = ParticleSystem.computeFloatingProgram
@@ -260,7 +260,7 @@ export class CollisionParticleSystem extends ParticleSystem {
 
     constructor(gl: WebGL2RenderingContext) {
         super(gl)
-        this.particleColor = this.createColor("7374FF", .3)
+        this.particleColor = createColor("7374FF", .3)
         this.particleSize = 0.03
         this.numParticles = config.obsctacleParticleCount
         this.computeProgram = ParticleSystem.computeProgram

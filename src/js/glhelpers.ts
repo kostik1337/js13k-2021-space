@@ -6,18 +6,17 @@ export type Size = [number, number]
 
 export function createPostprocTexFb(
     gl: WebGL2RenderingContext,
-    size?: Size,
-    filter: GLenum = gl.LINEAR
+    size: Size,
+    minFilter: GLenum = gl.LINEAR
 ): TexFb {
     let tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    if (size)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size[0], size[1], 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size[0], size[1], 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     let fb = gl.createFramebuffer()
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
@@ -102,7 +101,7 @@ export class ShaderProgram {
 }
 
 export interface RenderTarget {
-    init(gl: WebGL2RenderingContext): void
+    init(gl: WebGL2RenderingContext, size: Size): void
     resize(gl: WebGL2RenderingContext, size: Size): void
     swap(): void
     getReadTex(): WebGLTexture
@@ -111,7 +110,7 @@ export interface RenderTarget {
 }
 
 export class ScreenRenderTarget implements RenderTarget {
-    init(gl: WebGL2RenderingContext) { }
+    init(gl: WebGL2RenderingContext, size: Size) { }
     resize(gl: WebGL2RenderingContext, size: Size) { }
     swap() { }
     getReadTex(): WebGLTexture {
@@ -130,8 +129,8 @@ export class SingleTextureRenderTarget implements RenderTarget {
 
     constructor(private div: number = 1) { }
 
-    init(gl: WebGL2RenderingContext) {
-        this.texFb = createPostprocTexFb(gl)
+    init(gl: WebGL2RenderingContext, size: Size) {
+        this.texFb = createPostprocTexFb(gl, size)
     }
 
     resize(gl: WebGL2RenderingContext, size: Size) {
@@ -151,22 +150,22 @@ export class SingleTextureRenderTarget implements RenderTarget {
     getWriteFb() { return this.texFb.fb }
 }
 
-export function generateMips(gl: WebGL2RenderingContext, target: RenderTarget) {
+export function generateMips(gl: WebGL2RenderingContext, tex: WebGLTexture) {
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, target.getReadTex());
+    gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.generateMipmap(gl.TEXTURE_2D);
-
+    gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
 export class DoubleTextureRenderTarget implements RenderTarget {
     read: TexFb;
     write: TexFb;
 
-    constructor(private div: number = 1) { }
+    constructor(private div: number = 1, private filter: GLenum = null) { }
 
-    init(gl: WebGL2RenderingContext) {
-        this.read = createPostprocTexFb(gl)
-        this.write = createPostprocTexFb(gl)
+    init(gl: WebGL2RenderingContext, size: Size) {
+        this.read = createPostprocTexFb(gl, size, this.filter ?? gl.LINEAR)
+        this.write = createPostprocTexFb(gl, size, this.filter ?? gl.LINEAR)
     }
 
     resize(gl: WebGL2RenderingContext, size: Size) {
@@ -195,25 +194,24 @@ type Programs = { [index in string]: ShaderProgram }
 
 export class RenderHelper<RT extends RenderTargets, PR extends Programs> {
     buffer: WebGLBuffer;
-    size: Size;
 
     constructor(
         private gl: WebGL2RenderingContext,
         public renderTargets: RT,
-        public programs: PR
+        public programs: PR,
+        private size: Size
     ) {
         this.buffer = initScreenQuadBuffer(gl)
         for (let target of Object.values(renderTargets)) {
-            target.init(gl)
+            target.init(gl, size)
         }
     }
 
-    resize(w: number, h: number) {
-        this.size = [w, h]
+    resize(size: Size) {
+        this.size = size
 
-        const gl = this.gl
         for (let target of Object.values(this.renderTargets)) {
-            target.resize(gl, this.size)
+            target.resize(this.gl, size)
         }
     }
 

@@ -6,16 +6,6 @@ float hash3(vec3 x) {
   return hash(dot(x, vec3(3.13515, 2.87345, 1.917263)));
 }
 
-// curve matched using turingbot
-vec3 srgbToLinear(const vec3 x){
-    return 0.315206*x*((2.10545+x)*(0.0231872+x));
-}
-
-// curve matched using turingbot
-vec3 linearToSrgb(const vec3 x){
-    return 1.14374*(-0.126893*x+sqrt(x));
-}
-
 bool isOutOfSight(mat4 proj, mat4 view, vec3 position, out vec4 screenPosition) {
   screenPosition = proj * view * vec4(position, 1.);
   screenPosition.xyz /= screenPosition.w;

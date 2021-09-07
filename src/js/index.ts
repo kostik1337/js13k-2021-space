@@ -113,21 +113,18 @@ class Main {
     gameState: GameState;
 
 
-    initRenderHelper(gl: WebGL2RenderingContext): MyRenderHelper {
-        const particlesTarget = new SingleTextureRenderTarget()
-        const bufferTarget = new DoubleTextureRenderTarget()
-        const outputTarget = new ScreenRenderTarget()
-
+    initRenderHelper(gl: WebGL2RenderingContext, size: Size): MyRenderHelper {
         const renderHelper = new RenderHelper<RenderTargets, ShaderPrograms>(gl,
             {
-                particlesTarget,
-                bufferTarget,
-                outputTarget
+                particlesTarget: new SingleTextureRenderTarget(),
+                bufferTarget: new DoubleTextureRenderTarget(1, gl.LINEAR_MIPMAP_LINEAR),
+                outputTarget: new ScreenRenderTarget(),
             },
             {
                 pass1: new ShaderProgram(gl, "simple.vert.glsl", "main.frag.glsl"),
-                screen: new ShaderProgram(gl, "simple.vert.glsl", "bypass.frag.glsl"),
-            }
+                screen: new ShaderProgram(gl, "simple.vert.glsl", "screen.frag.glsl"),
+            },
+            size
         )
 
         return renderHelper
@@ -153,7 +150,7 @@ class Main {
 
         ParticleSystem.init(gl)
         this.gameState = new GameState(gl)
-        const renderHelper = this.initRenderHelper(gl)
+        const renderHelper = this.initRenderHelper(gl, this.getSize())
         this.ctx = {
             canvasGL,
             canvas2d,
@@ -206,8 +203,9 @@ class Main {
             gl.uniform1f(program.uniformLoc("dt"), this.ctx.dtSmoothed)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
             rh.renderPassCommit()
-            generateMips(gl, rh.renderTargets.bufferTarget);
         }
+
+        generateMips(gl, rh.renderTargets.bufferTarget.getReadTex());
 
         {
             const { program, size } = rh.renderPassBegin(
@@ -302,13 +300,15 @@ class Main {
         window.requestAnimationFrame(() => this.loop());
     }
 
+    getSize(): Size {return [window.innerWidth, window.innerHeight]}
+
     handleResize() {
-        const [w, h] = [window.innerWidth, window.innerHeight];
+        const size = this.getSize();
         [this.ctx.canvasGL].forEach(canvas => {
-            canvas.width = w
-            canvas.height = h
+            canvas.width = size[0]
+            canvas.height = size[1]
         })
-        this.ctx.renderHelper.resize(w, h)
+        this.ctx.renderHelper.resize(size)
     }
 }
 
