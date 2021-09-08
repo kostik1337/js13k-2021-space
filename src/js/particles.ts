@@ -198,8 +198,6 @@ export abstract class ParticleSystem {
         gl.drawArrays(gl.POINTS, 0, this.numParticles);
         gl.endTransformFeedback();
         gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
-
-        // turn on using fragment shaders again
         gl.disable(gl.RASTERIZER_DISCARD);
 
         // 
@@ -236,8 +234,8 @@ export abstract class ParticleSystem {
 export class FloatingParticleSystem extends ParticleSystem {
     constructor(gl: WebGL2RenderingContext) {
         super(gl)
-        this.particleColor = createColor("ffffff", .2)
-        this.particleSize = 0.1
+        this.particleColor = createColor(config.floatingColor, .15)
+        this.particleSize = 0.08
         this.numParticles = config.floatingParticleCount
         this.computeProgram = ParticleSystem.computeFloatingProgram
         this.init()
@@ -258,9 +256,9 @@ export class FloatingParticleSystem extends ParticleSystem {
 export class CollisionParticleSystem extends ParticleSystem {
     figure = 0;
 
-    constructor(gl: WebGL2RenderingContext) {
+    constructor(gl: WebGL2RenderingContext, color: string) {
         super(gl)
-        this.particleColor = createColor("7374FF", .3)
+        this.particleColor = createColor(color, .3)
         this.particleSize = 0.03
         this.numParticles = config.obsctacleParticleCount
         this.computeProgram = ParticleSystem.computeProgram
@@ -289,7 +287,6 @@ export class CollisionParticleSystem extends ParticleSystem {
         gl.drawArrays(gl.POINTS, 0, ParticleSystem.COLLISION_BUFFER_SIZE);
         gl.endTransformFeedback();
         gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
-        // turn on using fragment shaders again
         gl.disable(gl.RASTERIZER_DISCARD);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.write.collisionBuffer)

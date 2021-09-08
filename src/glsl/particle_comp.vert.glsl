@@ -15,30 +15,10 @@ uniform mat4 u_invprojview;
 #define rep(p, s) (mod(p, s) - s/2.)
 #define rep2(p, s) (abs(rep(p, 2.*s)) - s/2.)
 
-// float mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
-vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
-vec4 perm(vec4 x){return mod289(((x * 34.0) + 1.0) * x);}
-
-float noise3(vec3 p){
-    vec3 a = floor(p);
-    vec3 d = p - a;
-    d = d * d * (3.0 - 2.0 * d);
-
-    vec4 b = a.xxyy + vec4(0.0, 1.0, 0.0, 1.0);
-    vec4 k1 = perm(b.xyxy);
-    vec4 k2 = perm(k1.xyxy + b.zzww);
-
-    vec4 c = k2 + a.zzzz;
-    vec4 k3 = perm(c);
-    vec4 k4 = perm(c + 1.0);
-
-    vec4 o1 = fract(k3 * (1.0 / 41.0));
-    vec4 o2 = fract(k4 * (1.0 / 41.0));
-
-    vec4 o3 = o2 * d.z + o1 * (1.0 - d.z);
-    vec2 o4 = o3.yw * d.x + o3.xz * (1.0 - d.x);
-
-    return o4.y * d.y + o4.x * (1.0 - d.y);
+float noise(float t) {
+  float fl = floor(t), fr = fract(t);
+  fr = smoothstep(0., 1., fr);
+  return mix(hash(fl), hash(fl+1.), fr);
 }
 
 float box(vec3 p, vec3 s) {
@@ -65,23 +45,20 @@ float sdCross(vec3 p, vec2 s) {
 }
 
 float map(vec3 p) {
-  // p.xz *= mr(time*.2);
-  // p.yz *= mr(time*.17);
+  p.xy += .9*sin(p.z * vec2(.2, .3));
+  p.xy += .7*sin(p.z * vec2(.41, .64));
 
   float m = INF;
   if (figure == 0) {
-    p.xy += .9*sin(p.z * vec2(.2, .3));
-    p.xy += .7*sin(p.z * vec2(.41, .64));
     m = length(p.xy) - .1;
   } else if (figure == 1) {
-    p = rep(p, vec3(3.));
-    m = sdCross(p, vec2(.01));
-    // m = length(p.xy) - .1;
-
-    // vec2 s = vec2(1.41, .05);
-    // m = circle(p, s);
-    // m = min(m, circle(p.yzx, s));
-    // m = min(m, circle(p.zxy, s));
+    float modSize = 6.;
+    float pc = floor(p.z/modSize);
+    float dir = mix(-1., 1., mod(pc, 2.));
+    p.z = rep(p.z, modSize);
+    vec2 size = vec2(2., .01);
+    p.xy *= mr(time*dir*.2);
+    m = min(box(p, size.xyy), box(p, size.yxy));
   }
   return m;
 }
@@ -97,6 +74,18 @@ vec4 mnormal(vec3 p) {
   return vec4(m, normal);
 }
 
+vec3 randAcc() {
+  float vid = float(gl_VertexID);
+  float t = 3.*time;
+  vec3 randDir = vec3(
+    noise(vid*.361 + t),
+    noise(vid*.825 + t),
+    noise(vid*.717 + t)
+  );
+  randDir = normalize(tan(randDir));
+  return 40. * randDir;
+}
+
 void main() {
   if (compute_collision > 0) {
     v_position = vec3(map(i_position), 0., 0.);
@@ -109,21 +98,15 @@ void main() {
   vec3 acc;
   float maxSpeed;
   float airFriction;
+  acc = randAcc();
   if (m > 0.) {
     vec3 n = mn.yzw;
     acc = -50.*m*m*n;
-    maxSpeed = 2.;
+    maxSpeed = 1.;
     airFriction = .1;
   } else {
     vec3 p1 = 100.*p + 2.*time;
-    vec3 randDir = vec3(
-      noise3(p1),
-      noise3(p1.yzx),
-      noise3(p1.zxy)
-    ) * 2. - 1.;
-    randDir = normalize(tan(randDir));
-    acc = 20. * randDir;
-    maxSpeed = .7;
+    maxSpeed = 1.;
     airFriction = 0.;
   }
 
@@ -134,7 +117,7 @@ void main() {
   vec4 screenPosition;
   if (isOutOfSight(u_proj, u_view, v_position, screenPosition)) {
     v_position = generateRandomPosition(screenPosition, u_invprojview, gl_VertexID, time, 1.);
-    for (int i=0; i<3; ++i) {
+    for (int i=0; i<15; ++i) {
       vec4 mn = mnormal(v_position);
       v_position -= mn.x * mn.yzw;
     }

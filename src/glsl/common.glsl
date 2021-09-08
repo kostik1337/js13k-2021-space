@@ -10,19 +10,20 @@ float hash3(vec3 x) {return hash(dot(x, vec3(3.13515, 2.87345, 1.917263)));}
 vec3 srgbToLinear(vec3 p) {return p*p;}
 vec3 linearToSrgb(vec3 p) {return sqrt(p);}
 
+const vec3 maxAbsPos = vec3(2., 2., .5);
+
 bool isOutOfSight(mat4 proj, mat4 view, vec3 position, out vec4 screenPosition) {
   screenPosition = proj * view * vec4(position, 1.);
   screenPosition.xyz /= screenPosition.w;
   screenPosition.z -= .5;
-  vec3 maxAbsPos = vec3(1.5, 1.5, .5);
   return any(greaterThan(abs(screenPosition.xyz), maxAbsPos));
 }
 
 vec3 generateRandomPosition(vec4 screenPosition, mat4 u_invprojview, int vertexId, float time, float zminFactor) {
     float vid = float(vertexId);
     screenPosition = vec4(
-      (hash(vid + .5*time + 5.*hash3(screenPosition.xyz)) - .5) * 2.,
-      (hash(3.2*vid + .3*time + 13.*hash3(screenPosition.yzx + .345)) - .5) * 2.,
+      (hash(vid + .5*time + 5.*hash3(screenPosition.xyz)) - .5) * 2. * maxAbsPos.x,
+      (hash(3.2*vid + .3*time + 13.*hash3(screenPosition.yzx + .345)) - .5) * 2. * maxAbsPos.y,
       //mix(1., 1., hash(vid + .8*time + 13.*hash3(screenPosition.zxy + .123))),
       1.,
       1.);

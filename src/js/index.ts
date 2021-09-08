@@ -54,13 +54,16 @@ class GameState {
     // particleSystems: ParticleSystem[] = []
     floatingParticles: FloatingParticleSystem
     pathParticles: CollisionParticleSystem
+    obstacleParticles: CollisionParticleSystem
     rotation: [number, number] = [0, 0]
     position: V3 = [0, 0, 0]
     viewRotationMatrix: Matrix4
 
     constructor(gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
-        this.pathParticles = new CollisionParticleSystem(gl)
+        this.pathParticles = new CollisionParticleSystem(gl, config.pathColor)
+        this.obstacleParticles = new CollisionParticleSystem(gl, config.obstacleColor)
+        this.obstacleParticles.figure = 1
         this.position[2] = -4
         this.initViewMat()
     }
@@ -90,7 +93,8 @@ class GameState {
         }
         let particles = [
             this.floatingParticles,
-            this.pathParticles
+            this.pathParticles,
+            this.obstacleParticles
         ]
         particles.forEach(it => it.updateAndRender(ctx, vpData, size[1]))
         // this.particleSystems.forEach(ps => {
