@@ -3,8 +3,6 @@ in float v_fog;
 
 out vec4 outColor;
 
-#define PI 3.141592
-
 uniform vec3 color;
 
 vec3 particle(vec2 p) {

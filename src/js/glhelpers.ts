@@ -127,10 +127,10 @@ export class ScreenRenderTarget implements RenderTarget {
 export class SingleTextureRenderTarget implements RenderTarget {
     texFb: TexFb;
 
-    constructor(private div: number = 1) { }
+    constructor(private div: number = 1, private filter: GLenum = null) { }
 
     init(gl: WebGL2RenderingContext, size: Size) {
-        this.texFb = createPostprocTexFb(gl, size)
+        this.texFb = createPostprocTexFb(gl, size, this.filter ?? gl.LINEAR)
     }
 
     resize(gl: WebGL2RenderingContext, size: Size) {
@@ -186,6 +186,7 @@ export class DoubleTextureRenderTarget implements RenderTarget {
     }
 
     getReadTex() { return this.read.tex }
+    getWriteTex() { return this.write.tex }
     getWriteFb() { return this.write.fb }
 }
 

@@ -12,9 +12,6 @@ uniform mat4 u_proj;
 uniform mat4 u_view;
 uniform mat4 u_invprojview;
 
-#define PI 3.14159265
-#define INF 1e10
-#define mr(t) (mat2(cos(t), sin(t), -sin(t), cos(t)))
 #define rep(p, s) (mod(p, s) - s/2.)
 #define rep2(p, s) (abs(rep(p, 2.*s)) - s/2.)
 

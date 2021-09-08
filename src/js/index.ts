@@ -10,7 +10,7 @@ declare var DEBUG_DATA: boolean;
 
 type RenderTargets = {
     particlesTarget: RenderTarget,
-    bufferTarget: RenderTarget,
+    bufferTarget: DoubleTextureRenderTarget,
     outputTarget: RenderTarget
 }
 
@@ -116,12 +116,12 @@ class Main {
     initRenderHelper(gl: WebGL2RenderingContext, size: Size): MyRenderHelper {
         const renderHelper = new RenderHelper<RenderTargets, ShaderPrograms>(gl,
             {
-                particlesTarget: new SingleTextureRenderTarget(),
-                bufferTarget: new DoubleTextureRenderTarget(1, gl.LINEAR_MIPMAP_LINEAR),
+                particlesTarget: new SingleTextureRenderTarget(1, gl.LINEAR_MIPMAP_LINEAR),
+                bufferTarget: new DoubleTextureRenderTarget(1),
                 outputTarget: new ScreenRenderTarget(),
             },
             {
-                pass1: new ShaderProgram(gl, "simple.vert.glsl", "main.frag.glsl"),
+                pass1: new ShaderProgram(gl, "simple.vert.glsl", "pass1.frag.glsl"),
                 screen: new ShaderProgram(gl, "simple.vert.glsl", "screen.frag.glsl"),
             },
             size
@@ -191,6 +191,7 @@ class Main {
             this.gameState.render(this.ctx, size)
         }
 
+        generateMips(gl, rh.renderTargets.particlesTarget.getReadTex());
         {
             const { program, size } = rh.renderPassBegin(
                 [rh.renderTargets.particlesTarget, rh.renderTargets.bufferTarget],
@@ -205,7 +206,7 @@ class Main {
             rh.renderPassCommit()
         }
 
-        generateMips(gl, rh.renderTargets.bufferTarget.getReadTex());
+        // generateMips(gl, rh.renderTargets.bufferTarget.getReadTex());
 
         {
             const { program, size } = rh.renderPassBegin(

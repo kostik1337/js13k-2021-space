@@ -305,10 +305,11 @@ export class CollisionParticleSystem extends ParticleSystem {
     }
 
     initialGenerator(): number[] {
-        // const randRange = () => Math.random() * 2 - 1;
+        const randRange = () => Math.random() * 2 - 1;
+        const speed = 1
         return [
             0, 0, 100, // position out of frustum
-            0, 0, 0,// speed
+            speed * randRange(), speed * randRange(), speed * randRange(),// speed
         ]
     }
 
