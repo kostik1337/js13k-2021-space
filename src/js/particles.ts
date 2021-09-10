@@ -43,11 +43,11 @@ export abstract class ParticleSystem {
     static renderProgram: ShaderProgram
 
     static init(gl: WebGL2RenderingContext) {
-        const loadProgram = (gl: WebGL2RenderingContext, data: string[]): ShaderProgram => {
-            return new ShaderProgram(gl, data[0], data[1], null, data.slice(2))
+        const loadProgram = (gl: WebGL2RenderingContext, data: string[], prefix?: string): ShaderProgram => {
+            return new ShaderProgram(gl, data[0], data[1], prefix, data.slice(2))
         }
         const args = ["discard.frag.glsl", "v_position", "v_speed"]
-        this.computeProgram = loadProgram(gl, ["particle_comp.vert.glsl", ...args])
+        this.computeProgram = loadProgram(gl, ["particle_comp.vert.glsl", ...args], `#define FINAL_DIST ${config.finalDist.toFixed(1)}`)
         this.computeFloatingProgram = loadProgram(gl, ["particle_comp_floating.vert.glsl", ...args])
         this.renderProgram = loadProgram(gl, ["particle_render.vert.glsl", "particle_render.frag.glsl"])
     }
@@ -175,7 +175,7 @@ export abstract class ParticleSystem {
         let prog = this.computeProgram
         gl.useProgram(prog.program);
         gl.uniform1f(prog.uniformLoc("time"), ctx.time);
-        gl.uniform1f(prog.uniformLoc("dt"), ctx.dtSmoothed);
+        gl.uniform1f(prog.uniformLoc("dt"), ctx.dt);
         gl.uniform1i(prog.uniformLoc("compute_collision"), computeCollision ? 1 : 0);
         if (vpData) {
             gl.uniformMatrix4fv(prog.uniformLoc("u_proj"), false, vpData.proj.values);

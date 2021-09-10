@@ -28,7 +28,7 @@ export type Context = {
     context2d: CanvasRenderingContext2D;
     time: number;
     lastDate: number;
-    dtSmoothed: number; // FIXME
+    dt: number; // FIXME
     input: GameInput;
     renderHelper: MyRenderHelper;
     canvasTex: WebGLTexture;
@@ -54,13 +54,15 @@ class GameState {
     floatingParticles: FloatingParticleSystem
     pathParticles: CollisionParticleSystem
     obstacleParticles: CollisionParticleSystem
+    finalParticles: CollisionParticleSystem
     mouseMovement: V2 = [0, 0]
     dampedMovement: V2 = [0, 0]
     rotation: V2 = [0, 0]
     position: V3 = [0, 0, 0]
     energy = 1
+    projection: Matrix4
 
-    constructor(gl: WebGL2RenderingContext) {
+    constructor(private gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
         this.pathParticles = new CollisionParticleSystem(gl, config.pathColor)
         this.obstacleParticles = new CollisionParticleSystem(gl, config.obstacleColor)
@@ -68,10 +70,14 @@ class GameState {
         this.position[2] = 1
     }
 
+    resize(size: Size) {
+        this.projection = Matrix4.perspective(config.camParams[0], size[0] / size[1], config.camParams[1], config.camParams[2])
+    }
+
     updateAndRender(ctx: Context, size: Size) {
         // update
         this.dampedMovement = vmix(this.dampedMovement, this.mouseMovement,
-            mixFactor(ctx.dtSmoothed, Math.log(0.04)))
+            mixFactor(ctx.dt, Math.log(0.04)))
         debugLog("dampedMovement", this.dampedMovement)
         this.mouseMovement = [0, 0]
         const dm = this.dampedMovement
@@ -86,25 +92,29 @@ class GameState {
             .mul(Matrix4.rotation(this.rotation[1], 1, 2))
         const forward: V3 = [vrMat.at(2, 0), vrMat.at(2, 1), vrMat.at(2, 2)]
         const speed = Math.pow(this.energy, 2) * 2
-        this.position = vadd(this.position, vscale(forward, speed * ctx.dtSmoothed))
+        this.position = vadd(this.position, vscale(forward, speed * ctx.dt))
         debugLog("pos", this.position.map(v => v.toFixed(2)))
+        if (this.position[2] > config.finalDist - config.camParams[2] - 2 && this.finalParticles == null) {
+            this.finalParticles = new CollisionParticleSystem(this.gl, config.finalColor)
+            this.finalParticles.figure = 20
+        }
 
-        const projection = Matrix4.perspective(Math.PI / 3, size[0] / size[1], .1, 10)
         const trans = Matrix4.translate(this.position)
         const view = vrMat.mul(trans)
         const vpData = {
-            proj: projection,
+            proj: this.projection,
             view,
-            invProjView: projection.mul(view).invert()
+            invProjView: this.projection.mul(view).invert()
         }
         let particles = [
             this.floatingParticles,
             this.pathParticles,
             this.obstacleParticles
         ]
+        if (this.finalParticles) particles.push(this.finalParticles)
         particles.forEach(it => it.updateAndRender(ctx, vpData, size[1]))
         const hitPath = this.pathParticles.hitTest(ctx, this.position) < config.hitPathDistance
-        this.energy += (hitPath ? 0.5 : -0.1) * ctx.dtSmoothed
+        this.energy += (hitPath ? 0.3 : -0.05) * ctx.dt
         this.energy = clamp(this.energy, 0, 1)
         debugLog("energy", this.energy)
     }
@@ -163,7 +173,7 @@ class Main {
             gl,
             context2d,
             time: 0,
-            dtSmoothed: 0.016,
+            dt: 0.016,
             lastDate: Date.now(),
             input: new GameInput(canvasGL,
                 (dx, dy) => { this.gameState.onMouseMove(dx, dy) },
@@ -172,13 +182,6 @@ class Main {
             renderHelper: renderHelper,
             canvasTex
         }
-
-        // MDN.multiplyPoint(MDN.perspectiveMatrix(Math.PI/2, 1, 1, 10), [0,0,1,1])
-        // const mat = Matrix4.perspective(Math.PI/2, 1, 1, 10)
-        // const v = mat.mulVec([0, 0, 10, 1])
-
-        // console.log("v", v)
-        // console.log("z", v[2]/v[3])
 
         window.addEventListener('resize', () => this.handleResize());
         this.handleResize()
@@ -207,12 +210,10 @@ class Main {
             gl.uniform1i(program.uniformLoc("newTex"), 0)
             gl.uniform1i(program.uniformLoc("prevTex"), 1)
             gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
-            gl.uniform1f(program.uniformLoc("dt"), this.ctx.dtSmoothed)
+            gl.uniform1f(program.uniformLoc("dt"), this.ctx.dt)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
             rh.renderPassCommit()
         }
-
-        // generateMips(gl, rh.renderTargets.bufferTarget.getReadTex());
 
         {
             const { program, size } = rh.renderPassBegin(
@@ -226,66 +227,6 @@ class Main {
             gl.uniform1f(program.uniformLoc("energy"), this.gameState.energy)
             rh.renderPassCommit()
         }
-
-        // gl.disable(gl.BLEND)
-        // this.currentScreen().preRenderGL(this.ctx)
-
-        // {
-        //     const { locations, w, h } = rg.renderPassBegin<MainProgramData>("render")
-
-        //     gl.uniform1f(locations.timeLoc, this.ctx.time)
-        //     gl.uniform2f(locations.resLoc, w, h)
-
-        //     let renderData = this.ctx.renderData
-        //     if (renderData.ship) {
-        //         gl.uniformMatrix3fv(locations.shipRotationLoc, false, renderData.ship.rotation.toMatrix().values)
-        //         let pos = renderData.ship.position
-        //         gl.uniform3f(locations.shipPosLoc, pos.x, pos.y, pos.z)
-        //     } else {
-        //         gl.uniform3f(locations.shipPosLoc, 500,0,0)
-        //         gl.uniformMatrix3fv(locations.shipRotationLoc, false, math.Matrix3.id().values)
-        //     }
-
-        //     gl.uniformMatrix3fv(locations.viewRotationLoc, false, renderData.view.rotation.toMatrix().values)
-        //     let vpos = renderData.view.position
-        //     gl.uniform3f(locations.viewPosLoc, vpos.x, vpos.y, vpos.z)
-
-        //     let tbPos = renderData.timeBonusPos
-        //     if (tbPos)
-        //         gl.uniform4f(locations.timeBonusPosLoc, tbPos.x, tbPos.y, tbPos.z, config.timeBonusRadius)
-        //     else gl.uniform4f(locations.timeBonusPosLoc, 0, 0, 0, -1)
-
-        //     let sbPos = renderData.speedBonusPos
-        //     if (sbPos)
-        //         gl.uniform4f(locations.speedBonusPosLoc, sbPos.x, sbPos.y, sbPos.z, config.speedBonusRadius)
-        //     else gl.uniform4f(locations.speedBonusPosLoc, 0, 0, 0, -1)
-
-        //     rg.renderPassCommit()
-        // }
-
-        // {
-        //     const { locations, w, h } = rg.renderPassBegin<PostprocProgramData>("fxaa")
-        //     gl.uniform2f(locations.resLoc, w, h)
-        //     gl.uniform1i(locations.texPosLoc, 0)
-        //     rg.renderPassCommit()
-        // }
-
-        // gl.enable(gl.BLEND)
-        // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
-        // {
-        //     gl.activeTexture(gl.TEXTURE1)
-        //     gl.bindTexture(gl.TEXTURE_2D, this.canvasTex)
-        //     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.ctx.canvas2d);
-
-        //     const { locations, w, h } = rg.renderPassBegin<UiProgramData>("ui")
-        //     gl.uniform2f(locations.resLoc, w, h)
-        //     gl.uniform1i(locations.texPosLoc, 1)
-        //     gl.uniform2f(locations.texSizeLoc, this.ctx.canvas2d.width, this.ctx.canvas2d.height)
-        //     const uiOff = this.ctx.renderData.uiOffset;
-        //     gl.uniform3f(locations.offsetLoc, uiOff.x, uiOff.y, uiOff.z)
-        //     rg.renderPassCommit()
-        // }
     }
 
     loop() {
@@ -296,11 +237,8 @@ class Main {
         ctx.lastDate = date
         debugInfo.update(date)
 
-        ctx.dtSmoothed = mix(ctx.dtSmoothed, dt, 0.1); // FIXME: without smoothing everything trembles
+        ctx.dt = mix(ctx.dt, dt, 0.1); // FIXME: without smoothing everything trembles
 
-        // const screen = this.currentScreen();
-        // screen.update(ctx, ctx.dtSmoothed)
-        // screen.renderCanvas(ctx, dt)
         this.render()
         ctx.input.update() // Update input post screen update because whole architecture is shit
 
@@ -316,6 +254,7 @@ class Main {
             canvas.height = size[1]
         })
         this.ctx.renderHelper.resize(size)
+        this.gameState.resize(size)
     }
 }
 

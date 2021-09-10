@@ -15,10 +15,10 @@ uniform mat4 u_invprojview;
 #define rep(p, s) (mod(p, s) - s/2.)
 #define rep2(p, s) (abs(rep(p, 2.*s)) - s/2.)
 
-float noise(float t) {
+float noise(float t, float h) {
   float fl = floor(t), fr = fract(t);
   fr = smoothstep(0., 1., fr);
-  return mix(hash(fl), hash(fl+1.), fr);
+  return mix(hash(fl+h), hash(fl+h+1.), fr);
 }
 
 float box(vec3 p, vec3 s) {
@@ -59,6 +59,9 @@ float map(vec3 p) {
     vec2 size = vec2(2., .01);
     p.xy *= mr(time*dir*.2);
     m = min(box(p, size.xyy), box(p, size.yxy));
+  } else if (figure == 20) {
+    p.z += FINAL_DIST;
+    m = length(p)-1.;
   }
   return m;
 }
@@ -78,12 +81,13 @@ vec3 randAcc() {
   float vid = float(gl_VertexID);
   float t = 3.*time;
   vec3 randDir = vec3(
-    noise(vid*.361 + t),
-    noise(vid*.825 + t),
-    noise(vid*.717 + t)
+    noise(t, vid*.361),
+    noise(t, vid*.825),
+    noise(t, vid*.717)
   );
+  randDir -= .5;
   randDir = normalize(tan(randDir));
-  return 40. * randDir;
+  return 100. * randDir;
 }
 
 void main() {
@@ -105,8 +109,7 @@ void main() {
     maxSpeed = 1.;
     airFriction = .1;
   } else {
-    vec3 p1 = 100.*p + 2.*time;
-    maxSpeed = 1.;
+    maxSpeed = 5.;
     airFriction = 0.;
   }
 
@@ -117,7 +120,8 @@ void main() {
   vec4 screenPosition;
   if (isOutOfSight(u_proj, u_view, v_position, screenPosition)) {
     v_position = generateRandomPosition(screenPosition, u_invprojview, gl_VertexID, time, 1.);
-    for (int i=0; i<15; ++i) {
+    int I = 15;
+    for (int i=0; i<I; ++i) {
       vec4 mn = mnormal(v_position);
       v_position -= mn.x * mn.yzw;
     }
