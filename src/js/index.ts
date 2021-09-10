@@ -74,6 +74,8 @@ class GameState {
         this.projection = Matrix4.perspective(config.camParams[0], size[0] / size[1], config.camParams[1], config.camParams[2])
     }
 
+    getProgress() { return this.position[2] / config.finalDist; }
+
     updateAndRender(ctx: Context, size: Size) {
         // update
         this.dampedMovement = vmix(this.dampedMovement, this.mouseMovement,
@@ -225,6 +227,7 @@ class Main {
             // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
             gl.uniform1f(program.uniformLoc("energy"), this.gameState.energy)
+            gl.uniform1f(program.uniformLoc("progress"), this.gameState.getProgress())
             rh.renderPassCommit()
         }
     }

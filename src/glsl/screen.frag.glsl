@@ -3,15 +3,26 @@ out vec4 outColor;
 uniform sampler2D tex;
 uniform vec2 res;
 uniform float energy;
+uniform float progress;
 
 vec4 renderUi(vec2 uv) {
-  vec2 s = vec2(0.032, 0.03);
   float l = length(uv);
   float delta = 3./res.y;
-  float border = smoothstep(s.x, s.x-delta, l);
-  border *= smoothstep(s.y-delta, s.y, l);
+
+  vec2 s = vec2(0.032, 0.03);
+  float energyBorder = smoothstep(s.x, s.x-delta, l);
+  energyBorder *= smoothstep(s.y-delta, s.y, l);
   float energyCircle = smoothstep(s.x*energy, s.x*energy-delta, l);
-  return vec4(vec3(1.), border + energyCircle*0.5);
+
+  float ang = mod(atan(uv.x, uv.y)+TAU, TAU);
+  vec2 s1 = vec2(0.05, 0.04);
+  float progressBorder = smoothstep(s1.x, s1.x-delta, l);
+  progressBorder *= smoothstep(s1.y-delta, s1.y, l);
+  progressBorder *= mix(0., 1., sin(ang*40.)*.5+.5);
+  progressBorder *= step(ang / TAU, progress);
+
+  vec3 col = l < s.x ? vec3(1.) : vec3(.5, .7, 1.);
+  return vec4(col, progressBorder + energyBorder + energyCircle*0.5);
 }
 
 void main(void) {
