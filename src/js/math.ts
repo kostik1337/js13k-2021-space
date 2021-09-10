@@ -1,13 +1,18 @@
 export const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
 export const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t
 export const mixFactor = (dt: number, dampingLog: number) => Math.exp(dt * 60 * dampingLog)
+// Not so smooth step
+export const sstep = (min: number, max: number, t: number) => clamp((t - min) / (max - min), 0, 1)
 
+export type V2 = [number, number]
 export type V3 = [number, number, number]
 export type V4 = [number, number, number, number]
 
 export const vadd = <T extends number[]>(v1: T, v2: T): T => v1.map((v, i) => v + v2[i]) as T
 export const vscale = <T extends number[]>(v1: T, s: number): T => v1.map(v => v * s) as T
 export const vpow = <T extends number[]>(v1: T, p: number): T => v1.map(v => Math.pow(v, p)) as T
+export const vmix = <T extends number[]>(v1: T, v2: T, t: number): T => v1.map((v, i) => mix(v, v2[i], t)) as T
+export const vclamp = <T extends number[]>(v1: T, min: T, max: T): T => v1.map((v, i) => clamp(v, min[i], max[i])) as T
 
 export class Matrix4 {
     constructor(public values: number[]) { }

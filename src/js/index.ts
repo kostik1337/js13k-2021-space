@@ -1,7 +1,7 @@
 import { config } from './config';
 import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, RenderHelper as RenderHelper, RenderTarget, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
-import { Matrix4, mix, V3, vadd, vscale } from './math';
+import { clamp, Matrix4, mix, mixFactor, sstep, V2, V3, vadd, vclamp, vmix, vscale } from './math';
 import { FloatingParticleSystem, CollisionParticleSystem, ParticleSystem } from './particles';
 import { debugLog } from './utils';
 
@@ -51,41 +51,47 @@ export let debugInfo = {
 }
 
 class GameState {
-    // particleSystems: ParticleSystem[] = []
     floatingParticles: FloatingParticleSystem
     pathParticles: CollisionParticleSystem
     obstacleParticles: CollisionParticleSystem
-    rotation: [number, number] = [0, 0]
+    mouseMovement: V2 = [0, 0]
+    dampedMovement: V2 = [0, 0]
+    rotation: V2 = [0, 0]
     position: V3 = [0, 0, 0]
-    viewRotationMatrix: Matrix4
+    energy = 1
 
     constructor(gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
         this.pathParticles = new CollisionParticleSystem(gl, config.pathColor)
         this.obstacleParticles = new CollisionParticleSystem(gl, config.obstacleColor)
         this.obstacleParticles.figure = 1
-        this.position[2] = -4
-        this.initViewMat()
+        this.position[2] = 1
     }
 
-    private initViewMat() {
-        const xRot = Matrix4.rotation(this.rotation[0], 0, 2)
-        const yRot = Matrix4.rotation(this.rotation[1], 1, 2)
-        this.viewRotationMatrix = Matrix4.id()
-            .mul(xRot)
-            .mul(yRot)
-    }
+    updateAndRender(ctx: Context, size: Size) {
+        // update
+        this.dampedMovement = vmix(this.dampedMovement, this.mouseMovement,
+            mixFactor(ctx.dtSmoothed, Math.log(0.04)))
+        debugLog("dampedMovement", this.dampedMovement)
+        this.mouseMovement = [0, 0]
+        const dm = this.dampedMovement
+        this.rotation = this.rotation.map((v, i) => {
+            let boundsReduction = dm[i] > 0 != v > 0 ? 1 : (1 - sstep(Math.PI / 6, Math.PI / 4, Math.abs(v)))
+            return v + dm[i] * 1 * boundsReduction
+        }) as V2
 
-    update(ctx: Context) {
-        const m = this.viewRotationMatrix
-        const forward: V3 = [m.at(2, 0), m.at(2, 1), m.at(2, 2)]
-        this.position = vadd(this.position, vscale(forward, 1. * ctx.dtSmoothed))
-    }
+        // view rotation matrix
+        const vrMat = Matrix4.id()
+            .mul(Matrix4.rotation(this.rotation[0], 0, 2))
+            .mul(Matrix4.rotation(this.rotation[1], 1, 2))
+        const forward: V3 = [vrMat.at(2, 0), vrMat.at(2, 1), vrMat.at(2, 2)]
+        const speed = Math.pow(this.energy, 2) * 2
+        this.position = vadd(this.position, vscale(forward, speed * ctx.dtSmoothed))
+        debugLog("pos", this.position.map(v => v.toFixed(2)))
 
-    render(ctx: Context, size: Size) {
         const projection = Matrix4.perspective(Math.PI / 3, size[0] / size[1], .1, 10)
         const trans = Matrix4.translate(this.position)
-        const view = this.viewRotationMatrix.mul(trans)
+        const view = vrMat.mul(trans)
         const vpData = {
             proj: projection,
             view,
@@ -97,18 +103,14 @@ class GameState {
             this.obstacleParticles
         ]
         particles.forEach(it => it.updateAndRender(ctx, vpData, size[1]))
-        // this.particleSystems.forEach(ps => {
-        //     let minDist = ps.hitTest(ctx, this.position)
-        //     debugLog("map value", minDist)
-        //     debugLog("hit", minDist < config.hitDistance)
-        //     ps.updateAndRender(ctx, projection, view)
-        // })
+        const hitPath = this.pathParticles.hitTest(ctx, this.position) < config.hitPathDistance
+        this.energy += (hitPath ? 0.5 : -0.1) * ctx.dtSmoothed
+        this.energy = clamp(this.energy, 0, 1)
+        debugLog("energy", this.energy)
     }
 
     onMouseMove(dx: number, dy: number) {
-        this.rotation[0] += dx
-        this.rotation[1] -= dy
-        this.initViewMat()
+        this.mouseMovement = [dx, -dy]
     }
 }
 
@@ -192,7 +194,7 @@ class Main {
             const size = rh.bindOutput(rh.renderTargets.particlesTarget)
             gl.clearColor(0, 0, 0, 1)
             gl.clear(gl.COLOR_BUFFER_BIT)
-            this.gameState.render(this.ctx, size)
+            this.gameState.updateAndRender(this.ctx, size)
         }
 
         generateMips(gl, rh.renderTargets.particlesTarget.getReadTex());
@@ -221,6 +223,7 @@ class Main {
             gl.uniform1i(program.uniformLoc("tex"), 0)
             // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
+            gl.uniform1f(program.uniformLoc("energy"), this.gameState.energy)
             rh.renderPassCommit()
         }
 
@@ -298,14 +301,13 @@ class Main {
         // const screen = this.currentScreen();
         // screen.update(ctx, ctx.dtSmoothed)
         // screen.renderCanvas(ctx, dt)
-        this.gameState.update(this.ctx)
         this.render()
         ctx.input.update() // Update input post screen update because whole architecture is shit
 
         window.requestAnimationFrame(() => this.loop());
     }
 
-    getSize(): Size {return [window.innerWidth, window.innerHeight]}
+    getSize(): Size { return [window.innerWidth, window.innerHeight] }
 
     handleResize() {
         const size = this.getSize();

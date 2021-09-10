@@ -16,7 +16,7 @@ vec3 fakeBloom(vec2 uv) {
     vec2 dir = vec2(cos(angle), sin(angle));
     float len = exp(-5.*hash2(uv*2.151 + .123*i + .58*t));
     float p = exp(-len);
-    len *= res.y*.2;
+    len *= res.y*.3;
     vec2 offset = len*dir/res;
     float lod = log2(len)-1.;
     col += p * tex(newTex, uv + offset, lod)/I;
