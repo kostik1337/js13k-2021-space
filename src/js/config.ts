@@ -11,6 +11,11 @@ export const config = {
     obsctacleParticleCount: 50000,
     finalDist: 20,
 
+    energySpeedHitPath: 0.3,
+    energySpeedHitObst: -2,
+    energySpeedNone: -0.1,
+    deathPosDrop: 20,
+
     floatingColor: "ffffff",
     pathColor: "7374FF",
     obstacleColor: "FF9A61",

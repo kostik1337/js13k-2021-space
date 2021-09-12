@@ -3,8 +3,13 @@ out vec4 outColor;
 uniform sampler2D tex;
 uniform vec2 res;
 uniform float energy;
+uniform int energyState;
 uniform float progress;
 uniform float blackout;
+
+#define BLUE_COL vec3(.5, .7, 1.)
+#define WHITE_COL vec3(1.)
+#define RED_COL vec3(1., .7, .5)
 
 vec4 renderUi(vec2 uv) {
   float l = length(uv);
@@ -22,7 +27,11 @@ vec4 renderUi(vec2 uv) {
   progressBorder *= mix(0., 1., sin(ang*40.)*.5+.5);
   progressBorder *= step(ang / TAU, progress);
 
-  vec3 col = l < s.x ? vec3(1.) : vec3(.5, .7, 1.);
+  vec3 col;
+  if(l > s.x) col = BLUE_COL;
+  else if (energyState == 0) col = WHITE_COL;
+  else if (energyState == 1) col = BLUE_COL;
+  else if (energyState == 2) col = RED_COL;
   return vec4(col, progressBorder + energyBorder + energyCircle*0.5);
 }
 

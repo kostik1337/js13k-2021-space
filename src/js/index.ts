@@ -55,26 +55,27 @@ type InterpData = {
     target: number,
     rateLog: number,
     setFn: (x: number) => void,
-    end?: () => void
+    endCb?: () => void
 }
 
 const InterpHelper = {
     data: null as InterpData,
 
-    start(init: number, target: number, rate: number, setFn: (x: number) => void, end?: () => void) {
-        this.data = { val: init, init, target, rateLog: Math.log(rate), setFn, end }
+    start(init: number, target: number, rate: number, setFn: (x: number) => void, endCb?: () => void) {
+        this.data = { val: init, init, target, rateLog: Math.log(rate), setFn, endCb }
     },
 
     update(dt: number) {
         const data: InterpData = this.data
         if (!data) return
         data.val = mix(data.val, data.target, mixFactor(dt, data.rateLog))
-        if (Math.abs(data.val - data.target) < Math.abs(data.init - data.target) * 0.01) {
+        let end = Math.abs(data.val - data.target) < Math.abs(data.init - data.target) * 0.01
+        if (end) {
             data.val = data.target
-            if (data.end) data.end()
             this.data = null
         }
         data.setFn(data.val)
+        if (end && data.endCb) data.endCb()
     }
 }
 
@@ -82,6 +83,12 @@ enum FinishedState {
     PLAYING,
     JUST_FINISHED,
     FINISHED
+}
+
+enum EnergyState {
+    NONE = 0,
+    HIT_PATH,
+    HIT_OBST
 }
 
 class GameState {
@@ -94,10 +101,12 @@ class GameState {
     rotation: V2 = [0, 0]
     position: V3 = [0, 0, 0]
     energy = 1
+    energyState = EnergyState.NONE
     projection: Matrix4
     blackoutFactor = 1
-    // finished state
+    setBlackout = (x: number) => this.blackoutFactor = x
     finishState: FinishedState = FinishedState.PLAYING
+    isDead = false
 
     constructor(private gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
@@ -105,7 +114,7 @@ class GameState {
         this.obstacleParticles = new CollisionParticleSystem(gl, config.obstacleColor)
         this.obstacleParticles.figure = 1
         this.position[2] = 1
-        InterpHelper.start(-1, 1, 0.05, x => this.blackoutFactor = x)
+        InterpHelper.start(-1, 1, 0.05, this.setBlackout)
     }
 
     resize(size: Size) {
@@ -131,7 +140,7 @@ class GameState {
             .mul(Matrix4.rotation(this.rotation[0], 0, 2))
             .mul(Matrix4.rotation(this.rotation[1], 1, 2))
         const forward: V3 = [vrMat.at(2, 0), vrMat.at(2, 1), vrMat.at(2, 2)]
-        const speed = Math.sqrt(this.energy) * 4
+        const speed = Math.sqrt(Math.max(this.energy, 0)) * 4
         this.position = vadd(this.position, vscale(forward, -speed * ctx.dt))
         debugLog("pos", this.position.map(v => v.toFixed(2)))
         if (-this.position[2] > config.finalDist - config.camParams[2] - 2 && this.finalParticles == null) {
@@ -156,19 +165,33 @@ class GameState {
         if (this.finalParticles) {
             particles.push(this.finalParticles)
             const l = this.finalParticles.hitTest(ctx, this.position)
-            debugLog("final", l)
             hitFinal = l < config.hitFinalDistance
         }
         particles.forEach(it => it.updateAndRender(ctx, vpData, size[1]))
-        const hitPath = this.pathParticles.hitTest(ctx, this.position) < config.hitPathDistance
-        this.energy += (hitPath ? 0.3 : -0.05) * ctx.dt
-        this.energy = clamp(this.energy, 0, 1)
-        if (hitFinal && this.finishState == FinishedState.PLAYING) {
-            InterpHelper.start(1, 0, 0.1, x => this.blackoutFactor = x,
+        let es;
+        if (this.obstacleParticles.hitTest(ctx, this.position) < config.hitObstDistance) es = EnergyState.HIT_OBST
+        else if (this.pathParticles.hitTest(ctx, this.position) < config.hitPathDistance) es = EnergyState.HIT_PATH
+        else es = EnergyState.NONE
+        this.energyState = es;
+        this.energy += (es == EnergyState.HIT_PATH ? config.energySpeedHitPath
+            : es == EnergyState.HIT_OBST ? config.energySpeedHitObst
+                : config.energySpeedNone) * ctx.dt
+        this.energy = Math.min(this.energy, 1)
+        if (this.energy <= 0 && !this.isDead && this.finishState == FinishedState.PLAYING) {
+            this.isDead = true
+            InterpHelper.start(1, 0, 0.1, this.setBlackout,
                 () => {
-                    console.log("finishhhh")
-                    this.finishState = FinishedState.JUST_FINISHED
-                })
+                    this.rotation = [0, 0]
+                    this.position = [0, 0, this.position[2] + config.deathPosDrop]
+                    this.energy = 1
+                    this.isDead = false
+                    InterpHelper.start(-1, 1, 0.1, this.setBlackout)
+                }
+            )
+        }
+        if (hitFinal && this.finishState == FinishedState.PLAYING) {
+            InterpHelper.start(1, 0, 0.1, this.setBlackout,
+                () => this.finishState = FinishedState.JUST_FINISHED)
         }
         debugLog("energy", this.energy)
     }
@@ -274,6 +297,7 @@ class Main {
             // gl.uniform1f(program.uniformLoc("t"), this.ctx.time)
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
             gl.uniform1f(program.uniformLoc("energy"), this.gameState.energy)
+            gl.uniform1i(program.uniformLoc("energyState"), this.gameState.energyState)
             gl.uniform1f(program.uniformLoc("progress"), this.gameState.getProgress())
             gl.uniform1f(program.uniformLoc("blackout"), this.gameState.blackoutFactor)
             rh.renderPassCommit()
