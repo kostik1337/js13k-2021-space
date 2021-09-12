@@ -1,3 +1,4 @@
+import { AudioProc, setupAudioProcessor } from './audio';
 import { config } from './config';
 import { createPostprocTexFb, DoubleTextureRenderTarget, generateMips, RenderHelper as RenderHelper, RenderTarget, ScreenRenderTarget, ShaderProgram, SingleTextureRenderTarget, Size } from './glhelpers'
 import { GameInput } from './input';
@@ -107,14 +108,16 @@ class GameState {
     setBlackout = (x: number) => this.blackoutFactor = x
     finishState: FinishedState = FinishedState.PLAYING
     isDead = false
+    audioProc: AudioProc
 
     constructor(private gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
         this.pathParticles = new CollisionParticleSystem(gl, config.pathColor)
         this.obstacleParticles = new CollisionParticleSystem(gl, config.obstacleColor)
         this.obstacleParticles.figure = 1
-        this.position[2] = 1
+        this.position[2] = 5
         InterpHelper.start(-1, 1, 0.05, this.setBlackout)
+        this.audioProc = setupAudioProcessor()
     }
 
     resize(size: Size) {
@@ -169,8 +172,11 @@ class GameState {
         }
         particles.forEach(it => it.updateAndRender(ctx, vpData, size[1]))
         let es;
-        if (this.obstacleParticles.hitTest(ctx, this.position) < config.hitObstDistance) es = EnergyState.HIT_OBST
-        else if (this.pathParticles.hitTest(ctx, this.position) < config.hitPathDistance) es = EnergyState.HIT_PATH
+        const obstacleDist = this.obstacleParticles.hitTest(ctx, this.position)
+        const pathDist = this.pathParticles.hitTest(ctx, this.position)
+        this.audioProc.noise(Math.min(1, Math.exp(-pathDist * 2)))
+        if (obstacleDist < config.hitObstDistance) es = EnergyState.HIT_OBST
+        else if (pathDist < config.hitPathDistance) es = EnergyState.HIT_PATH
         else es = EnergyState.NONE
         this.energyState = es;
         this.energy += (es == EnergyState.HIT_PATH ? config.energySpeedHitPath
@@ -204,7 +210,6 @@ class GameState {
 class Main {
     ctx: Context;
     gameState: GameState;
-
 
     initRenderHelper(gl: WebGL2RenderingContext, size: Size): MyRenderHelper {
         const renderHelper = new RenderHelper<RenderTargets, ShaderPrograms>(gl,

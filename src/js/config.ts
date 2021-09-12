@@ -9,7 +9,7 @@ export const config = {
     baseFloatingSpeed: 0.2,
     floatingParticleCount: 100,
     obsctacleParticleCount: 50000,
-    finalDist: 20,
+    finalDist: 100,
 
     energySpeedHitPath: 0.3,
     energySpeedHitObst: -2,

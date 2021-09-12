@@ -45,14 +45,14 @@ float sdCross(vec3 p, vec2 s) {
 }
 
 float map(vec3 p) {
-  p.xy += .9*sin(p.z * vec2(.2, .3));
-  p.xy += .7*sin(p.z * vec2(.41, .64));
+  p.xy += 1.3*sin(p.z * .3 * vec2(.2, .3));
+  p.xy += 1.4*sin(p.z * .3 * vec2(.41, .64));
 
   float m = INF;
   if (figure == 0) {
     m = length(p.xy) - .1;
   } else if (figure == 1) {
-    float modSize = 6.;
+    float modSize = 15.;
     float pc = floor(p.z/modSize);
     float dir = mix(-1., 1., mod(pc, 2.));
     p.z = rep(p.z, modSize);
