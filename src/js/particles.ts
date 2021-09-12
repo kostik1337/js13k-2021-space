@@ -200,12 +200,11 @@ export abstract class ParticleSystem {
         gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
         gl.disable(gl.RASTERIZER_DISCARD);
 
-        // 
+        
         // gl.bindBuffer(gl.ARRAY_BUFFER, this.write.buffer)
-        // var arrBuffer = new Float32Array(ParticleSystem.COLLISION_BUFFER_SIZE * 6.);
+        // var arrBuffer = new Float32Array(this.numParticles * 6.);
         // gl.getBufferSubData(gl.ARRAY_BUFFER, 0, arrBuffer)
         // gl.bindBuffer(gl.ARRAY_BUFFER, null)
-        // 
 
         // Render
         gl.enable(gl.BLEND)

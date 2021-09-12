@@ -75,20 +75,4 @@ export class GameInput {
         // document.addEventListener('keydown', (e: KeyboardEvent) => keyListener(e.key, true));
         // document.addEventListener('keyup', (e: KeyboardEvent) => keyListener(e.key, false));
     }
-
-    update() {
-        // this.mouseState.leftButtonDown = this.mouseState.rightButtonDown = false
-
-        // let kbState = this.keyboardState
-        // let x = kbState[KeyboardButton.LEFT] ? -1 : kbState[KeyboardButton.RIGHT] ? 1 : 0
-        // let y = kbState[KeyboardButton.DOWN] ? 1 : kbState[KeyboardButton.UP] ? -1 : 0
-        // this.movement = [x, y]
-
-        // if (this.mouseState.leftButtonDown || this.keyboardState[KeyboardButton.SPEEDUP])
-        //     this.speedDiff = 1
-        // else if (this.mouseState.rightButtonDown || this.keyboardState[KeyboardButton.SLOWDOWN])
-        //     this.speedDiff = -1
-        // else
-        //     this.speedDiff = 0
-    }
 }

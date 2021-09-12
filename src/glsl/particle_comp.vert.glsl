@@ -61,7 +61,8 @@ float map(vec3 p) {
     m = min(box(p, size.xyy), box(p, size.yxy));
   } else if (figure == 20) {
     p.z += FINAL_DIST;
-    m = length(p)-1.;
+    // p.x -= .5;
+    m = length(p)-.5;
   }
   return m;
 }
@@ -79,15 +80,16 @@ vec4 mnormal(vec3 p) {
 
 vec3 randAcc() {
   float vid = float(gl_VertexID);
-  float t = 3.*time;
+  float freq = hash(vid*.123);
+  float t = time*freq;
   vec3 randDir = vec3(
     noise(t, vid*.361),
-    noise(t, vid*.825),
-    noise(t, vid*.717)
+    noise(t*1.3, vid*.825),
+    noise(t*1.4, vid*.717)
   );
   randDir -= .5;
-  randDir = normalize(tan(randDir));
-  return 100. * randDir;
+  randDir = normalize(randDir);
+  return 5. * randDir;
 }
 
 void main() {
@@ -95,8 +97,8 @@ void main() {
     v_position = vec3(map(i_position), 0., 0.);
     return;
   }
-  vec3 p = i_position;
-  vec4 mn = mnormal(p);
+
+  vec4 mn = mnormal(i_position);
   float m = mn.x;
   
   vec3 acc;
@@ -105,11 +107,11 @@ void main() {
   acc = randAcc();
   if (m > 0.) {
     vec3 n = mn.yzw;
-    acc = -50.*m*m*n;
+    acc += -100.*m*m*n;
     maxSpeed = 1.;
     airFriction = .1;
   } else {
-    maxSpeed = 5.;
+    maxSpeed = 1.;
     airFriction = 0.;
   }
 

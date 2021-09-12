@@ -10,12 +10,12 @@ float hash3(vec3 x) {return hash(dot(x, vec3(3.13515, 2.87345, 1.917263)));}
 vec3 srgbToLinear(vec3 p) {return p*p;}
 vec3 linearToSrgb(vec3 p) {return sqrt(p);}
 
-const vec3 maxAbsPos = vec3(2., 2., .5);
+const vec3 maxAbsPos = vec3(2., 2., 1.);
 
 bool isOutOfSight(mat4 proj, mat4 view, vec3 position, out vec4 screenPosition) {
   screenPosition = proj * view * vec4(position, 1.);
   screenPosition.xyz /= screenPosition.w;
-  screenPosition.z -= .5;
+  // screenPosition.z -= .5;
   return any(greaterThan(abs(screenPosition.xyz), maxAbsPos));
 }
 

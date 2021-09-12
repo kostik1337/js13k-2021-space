@@ -4,6 +4,7 @@ uniform sampler2D tex;
 uniform vec2 res;
 uniform float energy;
 uniform float progress;
+uniform float blackout;
 
 vec4 renderUi(vec2 uv) {
   float l = length(uv);
@@ -31,4 +32,5 @@ void main(void) {
   uv.x *= res.x / res.y;
   vec4 ui = renderUi(uv);
   outColor.rgb = mix(outColor.rgb, ui.rgb, ui.a);
+  outColor.rgb *= blackout;
 }

@@ -31,7 +31,6 @@ export type Context = {
     dt: number; // FIXME
     input: GameInput;
     renderHelper: MyRenderHelper;
-    canvasTex: WebGLTexture;
 }
 
 export let debugInfo = {
@@ -50,6 +49,41 @@ export let debugInfo = {
     }
 }
 
+type InterpData = {
+    val: number,
+    init: number,
+    target: number,
+    rateLog: number,
+    setFn: (x: number) => void,
+    end?: () => void
+}
+
+const InterpHelper = {
+    data: null as InterpData,
+
+    start(init: number, target: number, rate: number, setFn: (x: number) => void, end?: () => void) {
+        this.data = { val: init, init, target, rateLog: Math.log(rate), setFn, end }
+    },
+
+    update(dt: number) {
+        const data: InterpData = this.data
+        if (!data) return
+        data.val = mix(data.val, data.target, mixFactor(dt, data.rateLog))
+        if (Math.abs(data.val - data.target) < Math.abs(data.init - data.target) * 0.01) {
+            data.val = data.target
+            if (data.end) data.end()
+            this.data = null
+        }
+        data.setFn(data.val)
+    }
+}
+
+enum FinishedState {
+    PLAYING,
+    JUST_FINISHED,
+    FINISHED
+}
+
 class GameState {
     floatingParticles: FloatingParticleSystem
     pathParticles: CollisionParticleSystem
@@ -61,6 +95,9 @@ class GameState {
     position: V3 = [0, 0, 0]
     energy = 1
     projection: Matrix4
+    blackoutFactor = 1
+    // finished state
+    finishState: FinishedState = FinishedState.PLAYING
 
     constructor(private gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
@@ -68,19 +105,20 @@ class GameState {
         this.obstacleParticles = new CollisionParticleSystem(gl, config.obstacleColor)
         this.obstacleParticles.figure = 1
         this.position[2] = 1
+        InterpHelper.start(-1, 1, 0.05, x => this.blackoutFactor = x)
     }
 
     resize(size: Size) {
         this.projection = Matrix4.perspective(config.camParams[0], size[0] / size[1], config.camParams[1], config.camParams[2])
     }
 
-    getProgress() { return this.position[2] / config.finalDist; }
+    getProgress() { return -this.position[2] / config.finalDist; }
 
     updateAndRender(ctx: Context, size: Size) {
+        if (this.finishState != FinishedState.PLAYING) return
         // update
         this.dampedMovement = vmix(this.dampedMovement, this.mouseMovement,
             mixFactor(ctx.dt, Math.log(0.04)))
-        debugLog("dampedMovement", this.dampedMovement)
         this.mouseMovement = [0, 0]
         const dm = this.dampedMovement
         this.rotation = this.rotation.map((v, i) => {
@@ -93,15 +131,15 @@ class GameState {
             .mul(Matrix4.rotation(this.rotation[0], 0, 2))
             .mul(Matrix4.rotation(this.rotation[1], 1, 2))
         const forward: V3 = [vrMat.at(2, 0), vrMat.at(2, 1), vrMat.at(2, 2)]
-        const speed = Math.pow(this.energy, 2) * 2
-        this.position = vadd(this.position, vscale(forward, speed * ctx.dt))
+        const speed = Math.sqrt(this.energy) * 4
+        this.position = vadd(this.position, vscale(forward, -speed * ctx.dt))
         debugLog("pos", this.position.map(v => v.toFixed(2)))
-        if (this.position[2] > config.finalDist - config.camParams[2] - 2 && this.finalParticles == null) {
+        if (-this.position[2] > config.finalDist - config.camParams[2] - 2 && this.finalParticles == null) {
             this.finalParticles = new CollisionParticleSystem(this.gl, config.finalColor)
             this.finalParticles.figure = 20
         }
 
-        const trans = Matrix4.translate(this.position)
+        const trans = Matrix4.translate(vscale(this.position, -1))
         const view = vrMat.mul(trans)
         const vpData = {
             proj: this.projection,
@@ -113,11 +151,25 @@ class GameState {
             this.pathParticles,
             this.obstacleParticles
         ]
-        if (this.finalParticles) particles.push(this.finalParticles)
+
+        let hitFinal = false
+        if (this.finalParticles) {
+            particles.push(this.finalParticles)
+            const l = this.finalParticles.hitTest(ctx, this.position)
+            debugLog("final", l)
+            hitFinal = l < config.hitFinalDistance
+        }
         particles.forEach(it => it.updateAndRender(ctx, vpData, size[1]))
         const hitPath = this.pathParticles.hitTest(ctx, this.position) < config.hitPathDistance
         this.energy += (hitPath ? 0.3 : -0.05) * ctx.dt
         this.energy = clamp(this.energy, 0, 1)
+        if (hitFinal && this.finishState == FinishedState.PLAYING) {
+            InterpHelper.start(1, 0, 0.1, x => this.blackoutFactor = x,
+                () => {
+                    console.log("finishhhh")
+                    this.finishState = FinishedState.JUST_FINISHED
+                })
+        }
         debugLog("energy", this.energy)
     }
 
@@ -162,10 +214,6 @@ class Main {
             return;
         }
 
-        canvas2d.width = 800
-        canvas2d.height = 480
-        const canvasTex = createPostprocTexFb(gl, [canvas2d.width, canvas2d.height], gl.NEAREST)
-
         ParticleSystem.init(gl)
         this.gameState = new GameState(gl)
         const renderHelper = this.initRenderHelper(gl, this.getSize())
@@ -177,12 +225,11 @@ class Main {
             time: 0,
             dt: 0.016,
             lastDate: Date.now(),
-            input: new GameInput(canvasGL,
+            input: new GameInput(canvas2d,
                 (dx, dy) => { this.gameState.onMouseMove(dx, dy) },
                 (down, left) => { }
             ),
-            renderHelper: renderHelper,
-            canvasTex
+            renderHelper: renderHelper
         }
 
         window.addEventListener('resize', () => this.handleResize());
@@ -228,6 +275,7 @@ class Main {
             gl.uniform2f(program.uniformLoc("res"), size[0], size[1])
             gl.uniform1f(program.uniformLoc("energy"), this.gameState.energy)
             gl.uniform1f(program.uniformLoc("progress"), this.gameState.getProgress())
+            gl.uniform1f(program.uniformLoc("blackout"), this.gameState.blackoutFactor)
             rh.renderPassCommit()
         }
     }
@@ -242,8 +290,16 @@ class Main {
 
         ctx.dt = mix(ctx.dt, dt, 0.1); // FIXME: without smoothing everything trembles
 
+        if (this.gameState.finishState == FinishedState.JUST_FINISHED) {
+            const c = ctx.context2d
+            c.font = 'bold 30px monospace'
+            c.fillStyle = '#fff'
+            c.shadowColor = '#ffffffb'
+            c.shadowBlur = 20
+            c.fillText("You win!", 50, 100)
+        }
+        InterpHelper.update(dt)
         this.render()
-        ctx.input.update() // Update input post screen update because whole architecture is shit
 
         window.requestAnimationFrame(() => this.loop());
     }
@@ -252,7 +308,7 @@ class Main {
 
     handleResize() {
         const size = this.getSize();
-        [this.ctx.canvasGL].forEach(canvas => {
+        [this.ctx.canvasGL, this.ctx.canvas2d].forEach(canvas => {
             canvas.width = size[0]
             canvas.height = size[1]
         })
@@ -261,5 +317,5 @@ class Main {
     }
 }
 
-let canvas = document.getElementById("canvasgl")
+let canvas = document.getElementById("canvas2d")
 canvas.onclick = () => { canvas.onclick = null; new Main(); }
