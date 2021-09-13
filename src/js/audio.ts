@@ -1,4 +1,5 @@
 import { Freeverb } from "./freeverb";
+import { sstep } from "./math";
 
 export type AudioProc = {
     noise: (gain: number) => void
@@ -10,14 +11,14 @@ export function setupAudioProcessor(): AudioProc {
     const sequencer = (bpm: number): AudioNode => {
         const samplesPerBeat = context.sampleRate * 60 / (bpm * 4)
         const chordProgression = [
-            [0, 3, 7, 10],
-            [0, 3, 7, 12],
-            [3, 12, 10, 7],
-            [7, 9, 10, 12],
-            [0, 3, 7, 10],
-            [0, 3, 7, 12],
-            [3, 5, 12, 15],
-            [7, 10, 15, 17],
+            [0, 3, 7, 10, 7, 15, 12],
+            [0, 3, 7, 12, 3, 15, 10],
+            [3, 12, 10, 7, 3, 12, 17],
+            [7, 9, 10, 12, 7, 12, 19],
+            [0, 3, 7, 10, 7, 15, 12],
+            [0, 3, 7, 12, 3, 15, 10],
+            [3, 5, 12, 15, 3, 17, 15],
+            [7, 10, 15, 17, 10, 15, 19],
         ]
         let currentSample = 0
         let currentChord = 0
@@ -38,8 +39,10 @@ export function setupAudioProcessor(): AudioProc {
                     currentChord = (currentChord + 1) % chordProgression.length
                 }
                 let factor = (currentSample % samplesPerBeat) / samplesPerBeat
-                outputDataGain[sample] = Math.sin(factor * Math.PI);
-                const beatId = Math.floor(currentSample / samplesPerBeat) % 4
+                let envParams = [0.1, 0.9]
+                let envelope = sstep(0, envParams[0], factor) * (1 - sstep(envParams[0], envParams[1], factor))
+                outputDataGain[sample] = envelope;
+                const beatId = Math.floor(currentSample / samplesPerBeat) % chordProgression[currentChord].length
                 outputDataFreq[sample] = noteToFreq(chordProgression[currentChord][beatId]);
 
                 timeUntilNoteUp -= 1
@@ -63,11 +66,11 @@ export function setupAudioProcessor(): AudioProc {
     const bpm = 90
 
     const audioPostproc = (): GainNode => {
-        let reverb = Freeverb(context, .7, .4, .95, 2000)
+        let reverb = Freeverb(context, .7, .4, .8, 6000)
         reverb.connect(context.destination);
 
         let delay = context.createDelay(1.0);
-        delay.delayTime.value = 60 / bpm;
+        delay.delayTime.value = 60 / bpm / 1.5;
         let delayGain = context.createGain();
         delayGain.gain.value = .3;
 

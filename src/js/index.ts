@@ -105,6 +105,7 @@ class GameState {
     energyState = EnergyState.NONE
     projection: Matrix4
     blackoutFactor = 1
+    invincibleTime = 0
     setBlackout = (x: number) => this.blackoutFactor = x
     finishState: FinishedState = FinishedState.PLAYING
     isDead = false
@@ -113,11 +114,12 @@ class GameState {
     constructor(private gl: WebGL2RenderingContext) {
         this.floatingParticles = new FloatingParticleSystem(gl)
         this.pathParticles = new CollisionParticleSystem(gl, config.pathColor)
+        this.pathParticles.figure = 0
         this.obstacleParticles = new CollisionParticleSystem(gl, config.obstacleColor)
-        this.obstacleParticles.figure = 1
         this.position[2] = 5
         InterpHelper.start(-1, 1, 0.05, this.setBlackout)
         this.audioProc = setupAudioProcessor()
+        this.invincibleTime = config.invincibleTime
     }
 
     resize(size: Size) {
@@ -128,14 +130,16 @@ class GameState {
 
     updateAndRender(ctx: Context, size: Size) {
         if (this.finishState != FinishedState.PLAYING) return
+        this.invincibleTime -= ctx.dt
+        this.obstacleParticles.figure = Math.max(1, Math.floor(1 + this.getProgress() * 8))
         // update
         this.dampedMovement = vmix(this.dampedMovement, this.mouseMovement,
-            mixFactor(ctx.dt, Math.log(0.04)))
+            mixFactor(ctx.dt, config.movementDampingLog))
         this.mouseMovement = [0, 0]
         const dm = this.dampedMovement
         this.rotation = this.rotation.map((v, i) => {
             let boundsReduction = dm[i] > 0 != v > 0 ? 1 : (1 - sstep(Math.PI / 6, Math.PI / 4, Math.abs(v)))
-            return v + dm[i] * 1 * boundsReduction
+            return v + dm[i] * config.movementPower * boundsReduction
         }) as V2
 
         // view rotation matrix
@@ -143,7 +147,7 @@ class GameState {
             .mul(Matrix4.rotation(this.rotation[0], 0, 2))
             .mul(Matrix4.rotation(this.rotation[1], 1, 2))
         const forward: V3 = [vrMat.at(2, 0), vrMat.at(2, 1), vrMat.at(2, 2)]
-        const speed = Math.sqrt(Math.max(this.energy, 0)) * 4
+        const speed = Math.sqrt(Math.max(this.energy, 0)) * config.maxSpeed
         this.position = vadd(this.position, vscale(forward, -speed * ctx.dt))
         debugLog("pos", this.position.map(v => v.toFixed(2)))
         if (-this.position[2] > config.finalDist - config.camParams[2] - 2 && this.finalParticles == null) {
@@ -175,7 +179,7 @@ class GameState {
         const obstacleDist = this.obstacleParticles.hitTest(ctx, this.position)
         const pathDist = this.pathParticles.hitTest(ctx, this.position)
         this.audioProc.noise(Math.min(1, Math.exp(-pathDist * 2)))
-        if (obstacleDist < config.hitObstDistance) es = EnergyState.HIT_OBST
+        if (obstacleDist < config.hitObstDistance && this.invincibleTime <= 0) es = EnergyState.HIT_OBST
         else if (pathDist < config.hitPathDistance) es = EnergyState.HIT_PATH
         else es = EnergyState.NONE
         this.energyState = es;
@@ -191,6 +195,7 @@ class GameState {
                     this.position = [0, 0, this.position[2] + config.deathPosDrop]
                     this.energy = 1
                     this.isDead = false
+                    this.invincibleTime = config.invincibleTime
                     InterpHelper.start(-1, 1, 0.1, this.setBlackout)
                 }
             )
@@ -321,11 +326,17 @@ class Main {
 
         if (this.gameState.finishState == FinishedState.JUST_FINISHED) {
             const c = ctx.context2d
-            c.font = 'bold 30px monospace'
-            c.fillStyle = '#fff'
-            c.shadowColor = '#ffffffb'
+            c.fillStyle = '#000'
+            c.fillRect(0, 0, c.canvas.width, c.canvas.height)
+
+            c.font = 'bold 20px monospace'
+            c.fillStyle = '#ffffff'
+            c.shadowColor = '#ffffffbb'
             c.shadowBlur = 20
-            c.fillText("You win!", 50, 100)
+            const lineHeight = 30
+            c.fillText("Kosminenvirta", 40, 100)
+            c.fillText("a game by kostik1337", 40, 100 + lineHeight)
+            c.fillText("Thanks for playing!", 40, 100 + 2 * lineHeight)
         }
         InterpHelper.update(dt)
         this.render()

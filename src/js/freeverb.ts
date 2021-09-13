@@ -103,20 +103,20 @@ export function Freeverb(
         combFilters.push(lfpf)
     }
 
-    Object.defineProperties(node, {
-        roomSize: {
-            set: (value) => {
-                roomSize = value
-                refreshFilters()
-            }
-        },
-        dampening: {
-            set: (value) => {
-                dampening = value
-                refreshFilters()
-            }
-        }
-    })
+    // Object.defineProperties(node, {
+    //     roomSize: {
+    //         set: (value) => {
+    //             roomSize = value
+    //             refreshFilters()
+    //         }
+    //     },
+    //     dampening: {
+    //         set: (value) => {
+    //             dampening = value
+    //             refreshFilters()
+    //         }
+    //     }
+    // })
 
     refreshFilters()
 
