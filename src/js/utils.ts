@@ -1,5 +1,7 @@
 const mapping: {[key: string]: any} = {}
 
+declare var DEBUG_DATA: boolean;
+
 let updateDebugDiv = () => {
     let str = ""
     Object.entries(mapping).forEach(([key, val])=> {
@@ -9,6 +11,7 @@ let updateDebugDiv = () => {
 }
 
 export const debugLog = (key: string, text: any) => {
+    if (!DEBUG_DATA) return
     mapping[key] = text
     updateDebugDiv()
 }

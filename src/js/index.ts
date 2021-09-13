@@ -129,9 +129,15 @@ class GameState {
     getProgress() { return -this.position[2] / config.finalDist; }
 
     updateAndRender(ctx: Context, size: Size) {
+        if (this.finishState == FinishedState.JUST_FINISHED) this.finishState = FinishedState.FINISHED
         if (this.finishState != FinishedState.PLAYING) return
+        const newFigure = Math.max(1, Math.floor(1 + this.getProgress() * 8))
+        if (this.obstacleParticles.figure != newFigure) {
+            this.obstacleParticles.figure = newFigure
+            this.invincibleTime = config.invincibleTime
+        }
         this.invincibleTime -= ctx.dt
-        this.obstacleParticles.figure = Math.max(1, Math.floor(1 + this.getProgress() * 8))
+        debugLog("invincibleTime", this.invincibleTime)
         // update
         this.dampedMovement = vmix(this.dampedMovement, this.mouseMovement,
             mixFactor(ctx.dt, config.movementDampingLog))
@@ -314,6 +320,16 @@ class Main {
         }
     }
 
+    formatTime(time: number) {
+        const ms = time % 1000, s = Math.floor(time / 1000) % 60, m = Math.floor(time / 1000 / 60)
+        const leftPad2 = (v: number) => v < 10 ? `0${v}` : v
+        const leftPadMs = (v: number) => {
+            const vs = v.toFixed(3)
+            return v < 10 ? `00${vs}` : v < 100 ? `0${vs}` : vs
+        }
+        return `${leftPad2(m)}:${leftPad2(s)}:${leftPadMs(ms)}`;
+    }
+
     loop() {
         const ctx = this.ctx
         let date = Date.now()
@@ -324,6 +340,7 @@ class Main {
 
         ctx.dt = mix(ctx.dt, dt, 0.1); // FIXME: without smoothing everything trembles
 
+        InterpHelper.update(dt)
         if (this.gameState.finishState == FinishedState.JUST_FINISHED) {
             const c = ctx.context2d
             c.fillStyle = '#000'
@@ -333,12 +350,18 @@ class Main {
             c.fillStyle = '#ffffff'
             c.shadowColor = '#ffffffbb'
             c.shadowBlur = 20
-            const lineHeight = 30
-            c.fillText("Kosminenvirta", 40, 100)
-            c.fillText("a game by kostik1337", 40, 100 + lineHeight)
-            c.fillText("Thanks for playing!", 40, 100 + 2 * lineHeight)
+            let currentLine = 0
+            const renderLine = (str: string) => {
+                c.fillText(str, 40, 100 + currentLine * 30)
+                currentLine++
+            }
+            renderLine("Congratulations!")
+            renderLine(`Your time is ${this.formatTime(ctx.time)}`)
+            currentLine++
+            renderLine("Kosminenvirta")
+            renderLine("a game by kostik1337")
+            renderLine("Thanks for playing!")
         }
-        InterpHelper.update(dt)
         this.render()
 
         window.requestAnimationFrame(() => this.loop());

@@ -17,7 +17,7 @@ export const config = {
     energySpeedHitPath: 0.3,
     energySpeedHitObst: -10,
     energySpeedNone: -0.1,
-    invincibleTime: 1,
+    invincibleTime: 3,
     deathPosDrop: 50,
 
     floatingColor: "ffffff",
