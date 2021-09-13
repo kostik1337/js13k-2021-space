@@ -88,9 +88,8 @@ float ifs1(vec3 p) {
     p = rep2(p, s);
     s *= .5;
     p.xz *= mr(PI/4.);
-    p.yz *= mr(PI/6.);
+    p.yz *= mr(PI/4.);
   }
-  p.xz *= mr(time*.1);
   return length(p.xy)-.03;
 }
 
@@ -106,21 +105,22 @@ float boxesRot(vec3 p) {
 float lattice(vec3 p) {
   p.xz *= mr(PI/4.);
   p.yz *= mr(PI/6.);
-  p = rep2(p, vec3(8.));
+  p = rep2(p, vec3(10.));
   p.xz *= mr(time*.05);
-  return sdCross(p, vec2(.2));
+  return sdCross(p, vec2(.01));
 }
 
 float outwind(vec3 p) {
-  float modSize = 4.;
+  float modSize = 8.;
   float pc = floor(p.z/modSize);
+  p.xy += 3.*(hash(pc)-.5);
   p.z = rep(p.z, modSize);
   p.xy = abs(p.xy);
-  if(p.x < p.y) p.xy = p.yx;
-  p.x += 2.*hash(pc);
-  p.x = rep(p.x, 2.);
+  if (p.x < p.y) p.xy = p.yx;
+  p.x = rep(p.x, 4.);
   return max(abs(p.x) - .01, abs(p.z)-.01);
 }
+
 
 float map(vec3 p) {
   p.xy += 1.3*sin(p.z * .3 * vec2(.2, .3));
@@ -138,18 +138,18 @@ float map(vec3 p) {
   } else if (figure == 4) {
     m = dots(p);
   } else if (figure == 5) {
-    m = ifs1(p);
+    m = lattice(p);
   } else if (figure == 6) {
     m = boxesRot(p);
   } else if (figure == 7) {
-    m = lattice(p);
+    m = ifs1(p);
   } else if (figure == 8) {
     m = outwind(p);
   } else if (figure == 20) {
     p.z += FINAL_DIST;
     p.xz *= mr(time);
     p = abs(p);
-    m = dot(p, normalize(vec3(1.)))-1.;
+    m = dot(p, normalize(vec3(1.)))-2.;
   }
   m = max(m, length(p.xy)-4.);
   return m;

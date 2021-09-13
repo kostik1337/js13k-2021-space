@@ -10,7 +10,7 @@ import { debugLog } from './utils';
 declare var DEBUG_DATA: boolean;
 
 type RenderTargets = {
-    particlesTarget: RenderTarget,
+    particlesTarget: SingleTextureRenderTarget,
     bufferTarget: DoubleTextureRenderTarget,
     outputTarget: RenderTarget
 }
@@ -266,7 +266,14 @@ class Main {
             lastDate: Date.now(),
             input: new GameInput(canvas2d,
                 (dx, dy) => { this.gameState.onMouseMove(dx, dy) },
-                (down, left) => { }
+                (key) => {
+                    let gfx = ['1', '2', '3', '4'].indexOf(key)
+                    if (gfx < 0) return
+                    let sizeDivisor = [1, 2, 4, 8][gfx]
+                    renderHelper.renderTargets.particlesTarget.div = sizeDivisor
+                    renderHelper.renderTargets.bufferTarget.div = sizeDivisor
+                    renderHelper.resize()
+                }
             ),
             renderHelper: renderHelper
         }
@@ -321,10 +328,10 @@ class Main {
     }
 
     formatTime(time: number) {
-        const ms = time % 1000, s = Math.floor(time / 1000) % 60, m = Math.floor(time / 1000 / 60)
+        const ms = (time * 1000) % 1000, s = Math.floor(time) % 60, m = Math.floor(time / 60)
         const leftPad2 = (v: number) => v < 10 ? `0${v}` : v
         const leftPadMs = (v: number) => {
-            const vs = v.toFixed(3)
+            const vs = v.toFixed(0)
             return v < 10 ? `00${vs}` : v < 100 ? `0${vs}` : vs
         }
         return `${leftPad2(m)}:${leftPad2(s)}:${leftPadMs(ms)}`;

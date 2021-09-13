@@ -127,7 +127,7 @@ export class ScreenRenderTarget implements RenderTarget {
 export class SingleTextureRenderTarget implements RenderTarget {
     texFb: TexFb;
 
-    constructor(private div: number = 1, private filter: GLenum = null) { }
+    constructor(public div: number = 1, private filter: GLenum = null) { }
 
     init(gl: WebGL2RenderingContext, size: Size) {
         this.texFb = createPostprocTexFb(gl, size, this.filter ?? gl.LINEAR)
@@ -161,7 +161,7 @@ export class DoubleTextureRenderTarget implements RenderTarget {
     read: TexFb;
     write: TexFb;
 
-    constructor(private div: number = 1, private filter: GLenum = null) { }
+    constructor(public div: number = 1, private filter: GLenum = null) { }
 
     init(gl: WebGL2RenderingContext, size: Size) {
         this.read = createPostprocTexFb(gl, size, this.filter ?? gl.LINEAR)
@@ -208,11 +208,11 @@ export class RenderHelper<RT extends RenderTargets, PR extends Programs> {
         }
     }
 
-    resize(size: Size) {
-        this.size = size
+    resize(size?: Size) {
+        if (size) this.size = size
 
         for (let target of Object.values(this.renderTargets)) {
-            target.resize(this.gl, size)
+            target.resize(this.gl, this.size)
         }
     }
 
