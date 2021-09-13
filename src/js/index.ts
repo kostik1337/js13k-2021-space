@@ -365,7 +365,7 @@ class Main {
             renderLine("Congratulations!")
             renderLine(`Your time is ${this.formatTime(ctx.time)}`)
             currentLine++
-            renderLine("Kosminenvirta")
+            renderLine("Kosminenvirtaus")
             renderLine("a game by kostik1337")
             renderLine("Thanks for playing!")
         }
